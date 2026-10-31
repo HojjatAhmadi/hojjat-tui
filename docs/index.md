@@ -53,7 +53,7 @@ hojjat-tui
 
 ## Project Status
 
-**Current version**: 0.2.0
+**Current version**: 0.3.0
 
 HOJJAT TUI is in active Phase 1 development. All core features — packaging, function registry, TUI interface, management commands, and persistence — are implemented and tested. The Chain Engine (Phase 2) is pending and will add the ability to link functions together into executable workflows.
 

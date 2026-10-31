@@ -85,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Chart rendering is documented as a Phase 2 feature with a placeholder implementation.
 - Installation URLs are placeholders until the repository URL is finalized.
 
-## [0.2.0] - 2026-10-31
+## [0.3.0] - 2026-10-31
 
 ### Changed
 
