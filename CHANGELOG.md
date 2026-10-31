@@ -84,3 +84,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The **Chain Engine** feature (linking functions together in sequences) is deferred to Phase 2.
 - Chart rendering is documented as a Phase 2 feature with a placeholder implementation.
 - Installation URLs are placeholders until the repository URL is finalized.
+
+## [0.2.0] - 2026-10-31
+
+### Changed
+
+- Cleaned development and test data from release baseline (removed 6 test chains from database)
+- Updated `.gitignore` with comprehensive exclusions for runtime data
+- Initialized Git repository with proper baseline commit
+- Updated README.md with comprehensive project documentation
+- Created professional developer documentation suite (docs/)
+- Applied structured commit history with meaningful commit messages
+- Verified fresh installation starts with empty Chain list
+- Confirmed built-in functions remain available after cleanup
+
+### Fixed
+
+- Database persistence configuration investigation and cleanup
+- Git baseline verification (no developer-specific data tracked)
+
+### Pending
+
+- **Chain Engine** (linking functions together in sequences) — deferred to Phase 2
+- Chart rendering — placeholder implementation, full implementation in Phase 2
