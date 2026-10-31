@@ -1,6 +1,6 @@
 # HOJJAT TUI
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/placeholder/hojjat-tui)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/placeholder/hojjat-tui)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -114,9 +114,7 @@ python manage.py run my_function --param name World
 
 ---
 
-## Available Built-in Functions
 
-HOJJAT TUI includes the following built-in functions that are registered on startup:
 
 ### `hello`
 
@@ -409,4 +407,4 @@ The test suite covers:
 
 MIT License — see [LICENSE](LICENSE) for details.
 
-**Current version: 0.2.0**
+**Current version: 0.3.0**
