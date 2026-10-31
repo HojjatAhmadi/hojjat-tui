@@ -22,10 +22,6 @@ if __name__ == "__main__":
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
     
-    # Ensure built-in functions are registered FIRST
-    from hojjat_tui import builtin_functions  # noqa: F401
-    builtin_functions.register_builtins()
-    
     from hojjat_tui.management import main
     
     main()

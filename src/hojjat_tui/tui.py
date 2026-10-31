@@ -705,12 +705,9 @@ class HojjatTUIApplication(App):
 
     async def refresh_functions(self):
         try:
-            from hojjat_tui.builtin_functions import register_builtins
-            register_builtins()
-        except Exception as e:
-            logger.warning(f"Could not load builtins: {e}")
-
-        self.registry = get_registry()
+            self.registry = get_registry()
+        except:
+            pass
         menu = self.query_one("#function-list", OptionList)
         menu.clear_options()
 
