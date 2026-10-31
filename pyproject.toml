@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hojjat-tui"
+version = "0.2.0"
+description = "HOJJAT TUI — a terminal UI for running registered Python functions"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Hojjat Ahmadi" }]
+keywords = ["tui", "terminal", "textual", "functions"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Terminals :: Terminal Emulators / X Terminals",
+]
+
+dependencies = [
+    "textual>=0.79.0",
+    "pydantic>=2.0",
+    "rich>=13.0",
+    "bcrypt>=4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-textual-snapshot",
+    "ruff>=0.1.0",
+    "black>=23.0",
+    "build>=1.0",
+    "twine>=4.0",
+    "wheel>=0.40",
+]
+
+[project.scripts]
+hojjat-tui = "hojjat_tui.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/placeholder/hojjat-tui"
+"Bug Tracker" = "https://github.com/placeholder/hojjat-tui/issues"
+"Source Code" = "https://github.com/placeholder/hojjat-tui"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"hojjat_tui" = ["py.typed"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]
