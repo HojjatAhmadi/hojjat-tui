@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hojjat-tui"
-version = "0.2.0"
+version = "0.3.0"
 description = "HOJJAT TUI — a terminal UI for running registered Python functions"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -48,9 +48,9 @@ dev = [
 hojjat-tui = "hojjat_tui.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/placeholder/hojjat-tui"
-"Bug Tracker" = "https://github.com/placeholder/hojjat-tui/issues"
-"Source Code" = "https://github.com/placeholder/hojjat-tui"
+Homepage = "https://github.com/HojjatAhmadi/hojjat-tui"
+"Bug Tracker" = "https://github.com/HojjatAhmadi/hojjat-tui/issues"
+"Source Code" = "https://github.com/HojjatAhmadi/hojjat-tui"
 
 [tool.setuptools.packages.find]
 where = ["src"]
