@@ -177,6 +177,17 @@ Per-step execution results.
 | `output_summary` | Brief summary of output (first 500 chars, JSON-encoded for dict/list) |
 | `error_message` | Error message if step failed |
 
+### Authentication Flow
+
+The `users` table supports the application's authentication flow:
+
+1. On first launch, if no users exist, the First-Run Account Setup screen creates the initial account.
+2. On subsequent launches, the Welcome / Login screen verifies credentials via `verify_user()`.
+3. Passwords are verified using `verify_password()` which performs secure bcrypt hash comparison.
+4. Login failures return a generic error that does not reveal whether a username exists.
+
+No session tokens or plaintext passwords are stored in the database.
+
 ### bcrypt Password Hashing
 
 Passwords are hashed using [bcrypt](https://bcrypt.github.io/) with 12 rounds:

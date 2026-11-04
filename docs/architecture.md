@@ -62,11 +62,57 @@ graph TD
 - **Key APIs**: `Database` class, `hash_password()`, `verify_password()`, `save_chain()`, `load_chain()`, `list_chains()`, `clear_all_data()`, `get_default_db_path()`
 - **Mechanism**: Provides a SQLite database wrapper with automatic table initialization. Stores user accounts with bcrypt-hashed passwords, function execution logs, chain definitions, chain steps, parameter bindings, and execution history. Database schema versioning is tracked in the `schema_meta` table.
 
+### `src/hojjat_tui/auth.py`
+
+- **Purpose**: Authentication service, separate from the UI layer.
+- **Key APIs**: `AuthenticationService`, `AuthenticationError`
+- **Mechanism**: Delegates all credential storage and verification to the
+  `Database` persistence layer. Passwords are hashed with bcrypt and never
+  stored in plain text. Login failures return a generic message that does
+  not reveal whether a username exists.
+
+### `src/hojjat_tui/screens/welcome.py`
+
+- **Purpose**: Welcome / Login screen shown on startup when users exist.
+- **Key APIs**: `WelcomeScreen`
+- **Mechanism**: A Textual `Screen` that renders a PyFiglet HOJJAT TUI
+  logo, username and masked password inputs, and a Login button. Supports
+  Enter-key submission. On success, dismisses with `True` to reveal the
+  main TUI. On failure, shows an inline error.
+
+### `src/hojjat_tui/screens/first_run.py`
+
+- **Purpose**: First-Run Account Setup screen shown when no users exist.
+- **Key APIs**: `FirstRunScreen`
+- **Mechanism**: A Textual `Screen` that collects username, password, and
+  password confirmation. Validates required fields, password confirmation
+  match, and minimum password length. Hashes the password and persists the
+  account through the `AuthenticationService`. On success, dismisses with
+  `True` to proceed to the main TUI.
+
+## Authentication Flow
+
+```mermaid
+graph TD
+    Start[python manage.py run] --> InitDB[Initialize Database]
+    InitDB --> HasUsers{Users Exist?}
+    HasUsers -->|No| FirstRun[First-Run Account Setup]
+    HasUsers -->|Yes| Login[Welcome / Login Screen]
+    FirstRun -->|Create Account| AuthOK[Authentication Success]
+    Login -->|Enter Credentials| AuthCheck{Credentials Valid?}
+    AuthCheck -->|No| LoginError[Show Error, Stay on Login]
+    LoginError --> Login
+    AuthCheck -->|Yes| AuthOK
+    AuthOK --> MainTUI[Main HOJJAT TUI]
+    MainTUI -->|Logout Key L| Login
+```
+
 ### `src/hojjat_tui/tui.py`
 
 - **Purpose**: Textual-based interactive TUI application.
-- **Key Features**: Function menu navigation, chain builder wizard, function execution forms, result display with table/chart rendering, persistent chain management.
-- **Mechanism**: A `textual.app.App` subclass that composes screens for function selection, chain building, chain execution, and result viewing. Uses Rich integration for output rendering.
+- **Key Features**: Function menu navigation, chain builder wizard, function execution forms, result display with table/chart rendering, persistent chain management, authentication integration.
+- **Mechanism**: A `textual.app.App` subclass that composes screens for function selection, chain building, chain execution, and result viewing. On mount, checks for existing users and pushes the appropriate auth screen (First-Run or Welcome/Login) before revealing the main TUI. Supports logout via the `L` key or Settings menu.
+
 
 ### `src/hojjat_tui/builtin_functions.py`
 

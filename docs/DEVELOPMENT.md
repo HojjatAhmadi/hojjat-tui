@@ -51,9 +51,14 @@ hojjat-tui/
 │   ├── executor.py          # Execution engine
 │   ├── renderer.py          # Output rendering
 │   ├── persistence.py       # SQLite + bcrypt
+│   ├── auth.py              # Authentication service
 │   ├── management.py        # Management commands
 │   ├── tui.py               # Textual TUI app
 │   ├── builtin_functions.py # Built-in sample functions
+│   ├── screens/             # Authentication screens
+│   │   ├── __init__.py
+│   │   ├── welcome.py       # Welcome / Login screen
+│   │   └── first_run.py     # First-Run Account Setup screen
 │   └── py.typed             # PEP 561 marker
 ├── tests/
 │   ├── __init__.py
@@ -122,3 +127,29 @@ The executor wraps all calls in try/except and converts exceptions to `FunctionR
 - Tables: `users`, `function_logs`, `config`, `schema_meta`
 - `init_db()` is idempotent — safe to rerun
 - Password hashing uses bcrypt with 12 rounds
+
+## Authentication
+
+HOJJAT TUI requires authentication before the main TUI is shown:
+
+1. `python manage.py run` starts the TUI application.
+2. On mount, the app checks whether any user accounts exist.
+3. If no users exist, the `FirstRunScreen` is shown for initial account creation.
+4. If users exist, the `WelcomeScreen` (login) is shown.
+5. Successful authentication reveals the main TUI.
+6. Failed authentication shows an error and remains on the login screen.
+
+### Logout
+
+Press `L` or select **Logout** from the Settings menu to return to the login
+screen without closing the application.
+
+### Management Commands (No Login Required)
+
+These commands do not require authentication:
+- `python manage.py init` — Initialize database
+- `python manage.py createsuperuser` — Create a superuser
+- `python manage.py check` — Verify installation
+- `python manage.py test` — Run tests
+- `python manage.py --version` — Show version
+- `python manage.py run <function>` — Run a function from CLI

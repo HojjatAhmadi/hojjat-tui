@@ -8,7 +8,7 @@ bcrypt.  Generic error messages avoid revealing whether a username exists.
 import logging
 from typing import Optional
 
-from hojjat_tui.persistence import Database, verify_password
+from hojjat_tui.persistence import Database
 
 logger = logging.getLogger("hojjat_tui.auth")
 

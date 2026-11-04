@@ -5,6 +5,38 @@ All notable changes to HOJJAT TUI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.7] - 2026-11-04
+
+### Added
+
+#### Authentication & Startup
+
+- PyFiglet dependency for branded ASCII logo rendering
+- `AuthenticationService` in `src/hojjat_tui/auth.py` — secure authentication logic separate from UI
+- `WelcomeScreen` — professional login screen with PyFiglet logo, masked password input, Enter-key submission, and inline validation errors
+- `FirstRunScreen` — first-run account creation with username, password, and confirmation validation
+- `Database.get_user_count()` — query for total user account count
+- Logout support via `L` key and Settings menu
+
+#### Startup Flow
+
+- `python manage.py run` now shows the Welcome / Login screen first
+- First-run installations show the Account Setup screen before login
+- Successful authentication opens the existing main TUI
+- Logout returns to the login screen without terminating the application
+
+### Changed
+
+- Version synchronized: `pyproject.toml` and `__init__.py` both report `1.4.7`
+- `HojjatTUIApplication.on_mount()` now performs authentication check before revealing main TUI
+
+### Security
+
+- Passwords are hashed with bcrypt (12 rounds) via the existing persistence layer
+- No plaintext passwords are stored or logged
+- Login errors are generic — do not reveal whether a username exists
+- No default administrator account is created
+
 ## [0.1.0] - 2024-01-01
 
 ### Added

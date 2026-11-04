@@ -48,7 +48,7 @@ After installation, verify that the package is correctly installed:
 hojjat-tui --version
 ```
 
-This should display the current version, e.g., `hojjat-tui version 0.2.0`.
+This should display the current version, e.g., `hojjat-tui version 1.4.7`.
 
 ### Check Available Commands
 
@@ -61,6 +61,10 @@ python manage.py --help
 ```bash
 hojjat-tui
 ```
+
+On first launch, you will see a welcome / login screen. If no user account
+exists yet, you will be guided through a first-run account creation flow.
+After successful authentication, the main TUI opens.
 
 ## Database Initialization
 
@@ -107,6 +111,18 @@ pip uninstall hojjat-tui
 ```
 
 Note: This does not remove the SQLite database file. To completely remove all data, delete the database file manually or reinitialize without data.
+
+## Authentication
+
+HOJJAT TUI requires authentication before accessing the main TUI. The
+authentication flow is:
+
+1. **First launch**: If no users exist, the First-Run Account Setup screen is shown.
+2. **Subsequent launches**: The Welcome / Login screen is shown.
+3. **After login**: The main TUI opens.
+4. **Logout**: Press `L` or select Logout from Settings to return to the login screen.
+
+Passwords are hashed with bcrypt (12 rounds) and never stored in plain text.
 
 ---
 

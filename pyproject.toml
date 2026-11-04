@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hojjat-tui"
-version = "1.3.7"
+version = "1.4.7"
 description = "HOJJAT TUI — a terminal UI for running registered Python functions"
 readme = "README.md"
 requires-python = ">=3.9"

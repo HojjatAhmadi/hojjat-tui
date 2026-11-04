@@ -29,7 +29,7 @@ from hojjat_tui.chain import (
     delete_chain,
 )
 
-__version__ = "0.3.0"
+__version__ = "1.4.7"
 
 __all__ = [
     "__version__",
