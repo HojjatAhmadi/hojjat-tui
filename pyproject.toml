@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hojjat-tui"
-version = "0.3.0"
+version = "1.3.7"
 description = "HOJJAT TUI — a terminal UI for running registered Python functions"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -30,6 +30,7 @@ dependencies = [
     "pydantic>=2.0",
     "rich>=13.0",
     "bcrypt>=4.0",
+    "pyfiglet>=0.8.0",
 ]
 
 [project.optional-dependencies]
