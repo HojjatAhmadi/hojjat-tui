@@ -211,6 +211,17 @@ class Database:
             return cursor.fetchone() is not None
         finally:
             conn.close()
+
+    def get_user_count(self) -> int:
+        """Return the total number of user accounts."""
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM users")
+            row = cursor.fetchone()
+            return row[0] if row else 0
+        finally:
+            conn.close()
     
     def create_user(self, username: str, password: str, email: Optional[str] = None,
                     is_superuser: bool = False) -> bool:
