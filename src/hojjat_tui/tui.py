@@ -37,6 +37,9 @@ from hojjat_tui.chain import (
     create_chain, add_step, literal, output_of,
 )
 from hojjat_tui.persistence import Database
+from hojjat_tui.auth import AuthenticationService
+from hojjat_tui.screens.welcome import WelcomeScreen
+from hojjat_tui.screens.first_run import FirstRunScreen
 
 logger = logging.getLogger("hojjat_tui.tui")
 
@@ -624,6 +627,7 @@ class HojjatTUIApplication(App):
         ("f", "focus_functions", "Focus Function List"),
         ("c", "focus_chains", "Focus Chains"),
         ("s", "show_settings", "Settings"),
+        ("l", "logout", "Logout"),
     ]
 
     def __init__(self):
@@ -637,6 +641,8 @@ class HojjatTUIApplication(App):
         self._form_widgets: List = []
         self._last_result_output: str = ""
         self._last_result_raw: Any = None
+        self.auth_service: Optional[AuthenticationService] = None
+        self._authenticated: bool = False
 
         # Chain execution state
         self._selected_execute_chain: Optional[str] = None
@@ -680,8 +686,21 @@ class HojjatTUIApplication(App):
 
     async def on_mount(self) -> None:
         await self.init_db()
-        await self.refresh_functions()
-        await self.status_update("Ready — select a function to run")
+        self.auth_service = AuthenticationService(self.db)
+
+        # Require authentication before showing the main TUI.
+        has_users = self.auth_service.has_users()
+        if not has_users:
+            result = await self.push_screen(FirstRunScreen(self.auth_service))
+        else:
+            result = await self.push_screen(WelcomeScreen(self.auth_service))
+
+        if result is True:
+            self._authenticated = True
+            await self.refresh_functions()
+            await self.status_update("Ready — select a function to run")
+        else:
+            self.exit()
 
     async def status_update(self, msg: str):
         self.query_one("#status-bar", Static).update(msg)
@@ -876,6 +895,7 @@ class HojjatTUIApplication(App):
         menu.clear_options()
         menu.add_option(Option("Clear Execution History", "clear-history"))
         menu.add_option(Option("Reset Database (Clear All Data)", "reset-db"))
+        menu.add_option(Option("Logout", "logout"))
         await self._set_content_text(
             "Settings: Use arrow keys to navigate, Enter to select."
         )
@@ -1738,12 +1758,27 @@ class HojjatTUIApplication(App):
                 "Database has been reset. All persisted data was cleared."
             )
             await self.status_update("Database reset complete")
+        elif setting_id == "logout":
+            self.action_logout()
 
     def action_refresh(self):
         self.run_worker(self.refresh_functions, exclusive=True)
 
     def action_quit(self):
         self.exit()
+
+    def action_logout(self):
+        """Return to the login screen without terminating the application."""
+        self.run_worker(self._do_logout, exclusive=True)
+
+    async def _do_logout(self):
+        self._authenticated = False
+        result = await self.push_screen(WelcomeScreen(self.auth_service))
+        if result is True:
+            self._authenticated = True
+            await self.status_update("Logged in")
+        else:
+            self.exit()
 
     def action_focus_functions(self):
         self.current_view = "functions"
