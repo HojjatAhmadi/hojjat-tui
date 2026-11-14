@@ -441,6 +441,7 @@ def reload_function_modules() -> Dict[str, Any]:
         errors     - list of human-readable error messages
         summary    - human-readable summary string
     """
+    global _LAST_RELOAD_RESULT
     configured = set(read_function_modules())
     discovered = set(scan_functions_directory())
     all_modules = configured | discovered
@@ -463,6 +464,27 @@ def reload_function_modules() -> Dict[str, Any]:
 
     # Determine removed modules (loaded but no longer in all_modules)
     removed: List[str] = sorted(backup_loaded - all_modules)
+
+    # If there are no modules to reload, still clean up removed modules
+    # but preserve the rest of the registry. Functions registered via
+    # direct imports (not tracked by module discovery) must survive.
+    if not all_modules:
+        for mod_name in removed:
+            _remove_module_functions(mod_name)
+            _LOADED_MODULES.discard(mod_name)
+            _MODULE_TIMESTAMPS.pop(mod_name, None)
+            _MODULE_FILE_PATHS.pop(mod_name, None)
+
+        summary = "No changes detected." if not removed else f"Refresh completed: {len(removed)} removed."
+        result = {
+            "added": [],
+            "updated": [],
+            "removed": removed,
+            "errors": [],
+            "summary": summary,
+        }
+        _LAST_RELOAD_RESULT = result
+        return result
 
     # --- Clear state for fresh reload ---------------------------------
     _REGISTRY.clear()
@@ -569,7 +591,6 @@ def reload_function_modules() -> Dict[str, Any]:
         }
 
     # Cache for UI display
-    global _LAST_RELOAD_RESULT
     _LAST_RELOAD_RESULT = result
 
     return result

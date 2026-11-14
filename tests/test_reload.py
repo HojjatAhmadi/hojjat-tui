@@ -637,3 +637,143 @@ def multi_func():
         assert len(get_registry()) == 1
         assert "multi_func" in get_registry()
 
+
+class TestRefreshEmptyModules:
+    """Tests for Refresh behavior when no modules are configured or discovered."""
+
+    def test_refresh_empty_modules_preserves_registry(self, tmp_path, monkeypatch):
+        """Refresh with no configured/discovered modules must not clear the registry.
+
+        Functions registered via direct imports (not tracked by module discovery)
+        must survive a Refresh even when all_modules is empty.
+        """
+        _setup_test_path(tmp_path, monkeypatch)
+        # No pyproject.toml → no configured modules, no discovered modules
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            hojjat_function, load_function_modules, reload_function_modules,
+            get_registry, _REGISTRY,
+        )
+        _clear_registry_and_loaded()
+
+        # Register a function directly (simulating what manage.py does via imports)
+        @hojjat_function(name="direct_func")
+        def direct_func():
+            return "direct"
+
+        assert "direct_func" in get_registry()
+
+        # Refresh with no modules configured/discovered
+        result = reload_function_modules()
+        assert result["added"] == []
+        assert result["updated"] == []
+        assert result["removed"] == []
+        assert result["errors"] == []
+        assert "No changes detected" in result["summary"]
+
+        # Registry must be preserved
+        assert "direct_func" in get_registry()
+        assert get_registry()["direct_func"]["label"] == "direct_func"
+
+    def test_refresh_empty_modules_no_crash(self, tmp_path, monkeypatch):
+        """Refresh with empty registry and empty modules doesn't crash."""
+        _setup_test_path(tmp_path, monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            reload_function_modules, get_registry,
+        )
+        _clear_registry_and_loaded()
+
+        # Registry is empty, no modules configured
+        result = reload_function_modules()
+        assert result["summary"] == "No changes detected."
+        assert len(get_registry()) == 0
+
+    def test_registry_identity_consistent(self, tmp_path, monkeypatch):
+        """get_registry() always returns the same underlying _REGISTRY object."""
+        _setup_test_path(tmp_path, monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            _REGISTRY, get_registry, load_function_modules,
+        )
+        _clear_registry_and_loaded()
+
+        load_function_modules()
+        first = get_registry()
+        second = get_registry()
+        assert first == second
+        assert set(first.keys()) == set(_REGISTRY.keys())
+
+
+class TestStartupPopulation:
+    """Tests for startup population of the function list UI."""
+
+    def test_on_mount_populates_function_list(self, tmp_path, monkeypatch):
+        """on_mount() must call update_function_list() so the OptionList
+        shows all registered functions immediately at startup."""
+        _setup_test_path(tmp_path, monkeypatch)
+
+        # Register some functions
+        from hojjat_tui.function import (
+            hojjat_function, get_registry, _REGISTRY,
+        )
+        _clear_registry_and_loaded()
+
+        @hojjat_function(name="startup_func_1")
+        def startup_func_1():
+            return "one"
+
+        @hojjat_function(name="startup_func_2")
+        def startup_func_2():
+            return "two"
+
+        # Verify registry has functions
+        assert len(get_registry()) == 2
+
+        # Create app and verify update_function_list populates OptionList
+        from hojjat_tui.tui import HojjatTUIApplication
+        app = HojjatTUIApplication()
+        app.registry = get_registry()
+
+        async def run_test():
+            async with app.run_test() as pilot:
+                # on_mount should have called update_function_list
+                menu = app.query_one("#function-list")
+                assert menu.option_count == 2, f"Expected 2 options, got {menu.option_count}"
+                option_ids = [o.id for o in menu._options]
+                assert "startup_func_1" in option_ids
+                assert "startup_func_2" in option_ids
+
+        import asyncio
+        asyncio.run(run_test())
+
+    def test_empty_registry_shows_no_functions(self, tmp_path, monkeypatch):
+        """When no functions are registered, update_function_list() shows
+        'No functions available' placeholder."""
+        _setup_test_path(tmp_path, monkeypatch)
+
+        from hojjat_tui.function import (
+            _REGISTRY, get_registry,
+        )
+        _clear_registry_and_loaded()
+
+        assert len(get_registry()) == 0
+
+        from hojjat_tui.tui import HojjatTUIApplication
+        app = HojjatTUIApplication()
+        app.registry = {}
+
+        async def run_test():
+            async with app.run_test() as pilot:
+                menu = app.query_one("#function-list")
+                assert menu.option_count == 1
+                assert menu._options[0].disabled
+
+        import asyncio
+        asyncio.run(run_test())

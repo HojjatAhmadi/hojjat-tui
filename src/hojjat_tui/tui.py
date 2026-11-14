@@ -755,6 +755,8 @@ class HojjatTUIApplication(App):
         # the registry that manage.py just filled with decorated functions.
         # Reload is only triggered explicitly by the user (Refresh key/button).
         self.registry = get_registry()
+        # Populate the function list widget with all registered functions.
+        await self.update_function_list()
         # Focus the function list so Enter-key selection works out of the box.
         # Use set_timer to ensure focus is applied after the first render cycle.
         self.set_timer(0.05, self._focus_function_list)
