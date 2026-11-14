@@ -691,16 +691,20 @@ class HojjatTUIApplication(App):
         # Require authentication before showing the main TUI.
         has_users = self.auth_service.has_users()
         if not has_users:
-            result = await self.push_screen(FirstRunScreen(self.auth_service))
+            self.push_screen(FirstRunScreen(self.auth_service), callback=self._on_auth_result)
         else:
-            result = await self.push_screen(WelcomeScreen(self.auth_service))
+            self.push_screen(WelcomeScreen(self.auth_service), callback=self._on_auth_result)
 
+    def _on_auth_result(self, result: bool) -> None:
         if result is True:
             self._authenticated = True
-            await self.refresh_functions()
-            await self.status_update("Ready — select a function to run")
+            self.run_worker(self._after_auth, exclusive=True)
         else:
             self.exit()
+
+    async def _after_auth(self) -> None:
+        await self.refresh_functions()
+        await self.status_update("Ready — select a function to run")
 
     async def status_update(self, msg: str):
         self.query_one("#status-bar", Static).update(msg)
