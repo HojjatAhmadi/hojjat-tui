@@ -11,7 +11,7 @@ from pyfiglet import Figlet
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Center, Vertical, VerticalScroll
+from textual.containers import Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Input, Label, Static
 
@@ -27,28 +27,34 @@ class WelcomeScreen(Screen):
     ]
 
     CSS = """
-    #welcome-root {
+    WelcomeScreen {
+        background: #1a1b26;
         layout: vertical;
         align: center middle;
-        height: 100%;
-        width: 100%;
     }
 
     #welcome-scroll {
-        height: 100%;
         width: 100%;
+        height: 100%;
         layout: vertical;
         align: center middle;
+        overflow-y: auto;
+    }
+
+    #logo-container {
+        width: auto;
+        height: auto;
+        margin-bottom: 1;
+        align: center middle;
+        content-align: center middle;
     }
 
     #logo {
-        width: auto;
-        height: auto;
+        color: #bb9af7;
         text-align: center;
         content-align: center middle;
-        color: #bb9af7;
-        margin-bottom: 1;
-        overflow: hidden;
+        width: auto;
+        height: auto;
     }
 
     #subtitle {
@@ -63,11 +69,12 @@ class WelcomeScreen(Screen):
     #login-form {
         layout: vertical;
         width: 60;
-        max-width: 90%;
+        max-width: 100%;
         height: auto;
-        padding: 1;
+        padding: 1 2;
         background: #24283b;
         border: round #7aa2f7;
+        align: center middle;
     }
 
     #login-form Label {
@@ -81,12 +88,27 @@ class WelcomeScreen(Screen):
     #login-form Input {
         width: 100%;
         margin-bottom: 1;
+        background: #1a1b26;
+        border: tall #7aa2f7;
+    }
+
+    #login-form Input:focus {
+        border: tall #bb9af7;
     }
 
     #login-form Button {
         width: 100%;
         margin-top: 1;
         min-height: 3;
+        background: #7aa2f7;
+        color: #1a1b26;
+        border: tall #7aa2f7;
+        text-style: bold;
+    }
+
+    #login-form Button:hover {
+        background: #bb9af7;
+        border: tall #bb9af7;
     }
 
     #error {
@@ -97,6 +119,7 @@ class WelcomeScreen(Screen):
         height: auto;
         margin-top: 1;
         display: none;
+        text-style: bold;
     }
 
     #error.visible {
@@ -123,33 +146,34 @@ class WelcomeScreen(Screen):
     # -- composition ---------------------------------------------------
 
     def compose(self) -> ComposeResult:
-        with Center(id="welcome-root"):
-            with VerticalScroll(id="welcome-scroll"):
+        with VerticalScroll(id="welcome-scroll"):
+            with Vertical(id="logo-container"):
                 yield Static(self._render_logo(), id="logo")
-                yield Label("Terminal Workflow Studio", id="subtitle")
 
-                with Vertical(id="login-form"):
-                    yield Label("Username")
-                    self._username_input = Input(
-                        id="username-input",
-                        placeholder="Enter your username",
-                    )
-                    yield self._username_input
+            yield Label("Terminal Workflow Studio", id="subtitle")
 
-                    yield Label("Password")
-                    self._password_input = Input(
-                        id="password-input",
-                        placeholder="Enter your password",
-                        password=True,
-                    )
-                    yield self._password_input
+            with Vertical(id="login-form"):
+                yield Label("Username")
+                self._username_input = Input(
+                    id="username-input",
+                    placeholder="Enter your username",
+                )
+                yield self._username_input
 
-                    yield Button("Login", id="login-btn", variant="primary")
+                yield Label("Password")
+                self._password_input = Input(
+                    id="password-input",
+                    placeholder="Enter your password",
+                    password=True,
+                )
+                yield self._password_input
 
-                self._error = Static("Invalid username or password", id="error")
-                yield self._error
+                yield Button("Login", id="login-btn", variant="primary")
 
-                yield Label("Press Enter to login  •  Esc to quit", id="footer-hint")
+            self._error = Static("Invalid username or password", id="error")
+            yield self._error
+
+            yield Label("Press Enter to login  •  Esc to quit", id="footer-hint")
 
     # -- rendering helpers ---------------------------------------------
 
@@ -206,16 +230,25 @@ class WelcomeScreen(Screen):
             # Clear the password field so the user retypes it.
             if self._password_input:
                 self._password_input.value = ""
+                self._password_input.focus()
 
     def _show_error(self, message: str) -> None:
+        """Display error message and ensure it is visible to the user."""
         if self._error is None:
-            return
-        self._error.update(message)
+            self._error = self.query_one("#error", Static)
+
+        self._error.update(f"❌ {message}")
         self._error.add_class("visible")
+        # Force a layout refresh so the newly-visible widget participates
+        # in scrolling, then scroll it into view.
+        self._error.refresh(layout=True)
+        self._error.scroll_visible()
 
     def _hide_error(self) -> None:
+        """Hide the error when the user starts typing again."""
         if self._error is None:
-            return
+            self._error = self.query_one("#error", Static)
+
         self._error.remove_class("visible")
 
     def on_input_changed(self, event: Input.Changed) -> None:
