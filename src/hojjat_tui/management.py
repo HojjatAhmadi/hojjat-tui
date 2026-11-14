@@ -86,6 +86,7 @@ def cmd_run(args: argparse.Namespace):
         from hojjat_tui.tui import run as tui_run
         try:
             tui_run()
+            return
         except Exception as e:
             # Fall back to function list in non-interactive mode
             if "TTY" in str(e).upper() or "terminal" in str(e).lower():

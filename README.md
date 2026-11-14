@@ -1,6 +1,6 @@
 # HOJJAT TUI
 
-[![Version](https://img.shields.io/badge/version-1.4.7-blue)](https://github.com/placeholder/hojjat-tui)
+[![Version](https://img.shields.io/badge/version-1.4.8-blue)](https://github.com/placeholder/hojjat-tui)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -466,4 +466,4 @@ The test suite covers:
 
 MIT License — see [LICENSE](LICENSE) for details.
 
-**Current version: 1.4.7**
+**Current version: 1.4.8**
