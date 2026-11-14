@@ -1,12 +1,17 @@
 import inspect
+import importlib
+import logging
+import sys
 import time
 import typing as t
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 if t.TYPE_CHECKING:
     from textual.message import Message
+
+logger = logging.getLogger("hojjat_tui.function")
 
 @dataclass
 class FunctionResult:
@@ -121,3 +126,177 @@ def clear_logger():
     """Clear execution logs."""
     global _LOGGER
     _LOGGER = {name: [] for name in _LOGGER}
+
+
+# ---------------------------------------------------------------------------
+# Automatic function module discovery
+# ---------------------------------------------------------------------------
+
+_LOADED_MODULES: set[str] = set()
+
+
+def find_project_root() -> Optional[Path]:
+    """Find the project root by walking up from CWD looking for pyproject.toml."""
+    current = Path.cwd()
+    for parent in [current] + list(current.parents):
+        if (parent / "pyproject.toml").is_file():
+            return parent
+    return None
+
+
+def read_function_modules() -> List[str]:
+    """Read function_modules from [tool.hojjat-tui] in pyproject.toml.
+
+    Returns an empty list if no configuration exists or the file cannot be read.
+    """
+    root = find_project_root()
+    if root is None:
+        return []
+
+    pyproject_path = root / "pyproject.toml"
+    if not pyproject_path.is_file():
+        return []
+
+    try:
+        try:
+            import tomllib  # Python 3.11+
+
+            with open(pyproject_path, "rb") as f:
+                data = tomllib.load(f)
+        except ImportError:
+            # Python < 3.11: minimal fallback parser for [tool.hojjat-tui]
+            data = _parse_pyproject_toml_simple(pyproject_path)
+
+        tool = data.get("tool", {}) if isinstance(data, dict) else {}
+        hojjat = tool.get("hojjat-tui", {}) if isinstance(tool, dict) else {}
+        modules = hojjat.get("function_modules", []) if isinstance(hojjat, dict) else []
+        if isinstance(modules, str):
+            modules = [modules]
+        return [str(m) for m in modules]
+    except Exception:
+        logger.debug("Failed to read function_modules from pyproject.toml", exc_info=True)
+        return []
+
+
+def _parse_pyproject_toml_simple(path: Path) -> Dict[str, Any]:
+    """Minimal TOML fallback parser for [tool.hojjat-tui].function_modules.
+
+    Only handles the specific key we need; returns {} on any parsing difficulty.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        return {}
+
+    in_hojjat = False
+    result: Dict[str, Any] = {}
+    current_key: Optional[str] = None
+    current_values: List[str] = []
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        if line == "[tool.hojjat-tui]":
+            in_hojjat = True
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            in_hojjat = False
+            continue
+
+        if not in_hojjat:
+            continue
+
+        if "=" in line:
+            # Flush any previous multi-line array
+            if current_key is not None:
+                result[current_key] = current_values
+                current_key = None
+                current_values = []
+
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+
+            if key == "function_modules":
+                if value.startswith("["):
+                    # Inline array: ["main", "functions"]
+                    current_key = key
+                    current_values = _parse_inline_array(value)
+                else:
+                    # Single quoted string
+                    result[key] = [_strip_quotes(value)]
+
+    if current_key is not None:
+        result[current_key] = current_values
+
+    return result
+
+
+def _parse_inline_array(value: str) -> List[str]:
+    """Parse a simple inline TOML array of strings."""
+    if not (value.startswith("[") and value.endswith("]")):
+        return []
+    inner = value[1:-1].strip()
+    if not inner:
+        return []
+    parts = [p.strip() for p in inner.split(",")]
+    return [_strip_quotes(p) for p in parts if p]
+
+
+def _strip_quotes(value: str) -> str:
+    """Remove surrounding matching quotes from a string."""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        return value[1:-1]
+    return value
+
+
+def load_function_modules() -> Tuple[List[str], List[str]]:
+    """Import configured function modules so their decorators register functions.
+
+    Returns:
+        (loaded_modules, errors) where loaded_modules is a list of successfully
+        imported module names and errors is a list of human-readable error
+        messages for modules that failed to import.
+
+    Modules already in sys.modules are not re-imported (Python module caching
+    ensures decorators only run once per module).
+    """
+    modules = read_function_modules()
+    loaded: List[str] = []
+    errors: List[str] = []
+
+    root = find_project_root()
+    if root is not None:
+        root_str = str(root)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+
+    for module_name in modules:
+        if not module_name:
+            continue
+        if module_name in _LOADED_MODULES:
+            continue
+        try:
+            importlib.import_module(module_name)
+            _LOADED_MODULES.add(module_name)
+            loaded.append(module_name)
+        except ImportError as e:
+            errors.append(
+                f"Failed to import function module '{module_name}': {e}"
+            )
+            logger.warning("Failed to import function module '%s': %s", module_name, e)
+        except Exception as e:
+            errors.append(
+                f"Failed to import function module '{module_name}': {e}"
+            )
+            logger.exception("Failed to import function module '%s'", module_name)
+
+    return loaded, errors
+
+
+def get_loaded_modules() -> List[str]:
+    """Return the sorted list of loaded function module names."""
+    return sorted(_LOADED_MODULES)

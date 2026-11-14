@@ -5,6 +5,22 @@ All notable changes to HOJJAT TUI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.8] - 2026-11-14
+
+### Added
+
+- Automatic user function module discovery via `[tool.hojjat-tui].function_modules` in `pyproject.toml`
+- `load_function_modules()` in `src/hojjat_tui/function.py` — imports configured modules so `@hojjat_function()` decorators populate the registry
+- Module loading integrated into `hojjat-tui`, `hojjat-tui run`, and `python manage.py run` startup paths
+- `refresh_functions()` (TUI Refresh button) re-runs module discovery before reading the registry
+- Graceful error handling: missing modules produce actionable warnings without crashing
+
+### Changed
+
+- `hojjat-tui` (no args) now loads user function modules before starting the TUI
+- `hojjat-tui run` and `python manage.py run` now load user function modules before reading the registry
+- Version: `1.5.8` → `1.6.8`
+
 ## [1.5.8] - 2026-11-14
 
 ### Changed

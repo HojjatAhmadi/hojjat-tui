@@ -28,7 +28,7 @@ except ImportError:
     Figlet = None
 
 from hojjat_tui import __version__
-from hojjat_tui.function import get_registry
+from hojjat_tui.function import get_registry, load_function_modules
 from hojjat_tui.executor import execute_function
 from hojjat_tui.chain import (
     Chain, ChainStep, ParameterBinding, BindingType, ChainStatus,
@@ -672,6 +672,12 @@ class HojjatTUIApplication(App):
 
     async def refresh_functions(self):
         try:
+            # Re-run module discovery so newly configured modules are picked up.
+            # Already-loaded modules are skipped (Python module caching prevents
+            # duplicate decorator execution).
+            loaded, errors = load_function_modules()
+            for err in errors:
+                logger.warning("Module load error: %s", err)
             self.registry = get_registry()
         except:
             pass

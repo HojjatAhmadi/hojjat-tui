@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from hojjat_tui import __version__
-from hojjat_tui.function import get_registry
+from hojjat_tui.function import get_registry, load_function_modules
 from hojjat_tui.executor import execute_function
 from hojjat_tui.persistence import Database, get_default_db_path
 
@@ -75,10 +75,17 @@ def cmd_createsuperuser(args: argparse.Namespace):
 
 def cmd_run(args: argparse.Namespace):
     """Run a registered function by name, or launch the TUI if no name given."""
+    # Load user-configured function modules so decorators populate the registry.
+    loaded, errors = load_function_modules()
+    for err in errors:
+        print(f"[warning] {err}")
+    if loaded:
+        print(f"[info] Loaded function modules: {', '.join(loaded)}")
+
     # Ensure builtins are loaded
     from hojjat_tui import builtin_functions
     builtin_functions.register_builtins()
-    
+
     registry = get_registry()
     
     if not args.name:

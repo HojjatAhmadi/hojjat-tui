@@ -10,15 +10,16 @@ import sys
 from typing import List, Optional
 
 from hojjat_tui import __version__
+from hojjat_tui.function import load_function_modules
 from hojjat_tui.management import main as management_main
 
 
 def main(argv: Optional[List[str]] = None):
     """Main entry point for the console script.
-    
+
     If no arguments are provided, starts the TUI.
     If arguments are provided, delegates to management commands.
-    
+
     Usage:
         hojjat-tui          # Start TUI
         hojjat-tui run      # Show help for management commands
@@ -26,17 +27,23 @@ def main(argv: Optional[List[str]] = None):
     """
     if argv is None:
         argv = sys.argv[1:]
-    
+
     if not argv:
-        # No arguments — start the TUI
+        # No arguments — start the TUI.
+        # Load user-configured function modules before the TUI reads the registry.
+        loaded, errors = load_function_modules()
+        for err in errors:
+            print(f"[warning] {err}")
+        if loaded:
+            print(f"[info] Loaded function modules: {', '.join(loaded)}")
         from hojjat_tui.tui import run
         run()
         return
-    
+
     if "--version" in argv or "-V" in argv:
         print(f"hojjat-tui version {__version__}")
         return
-    
+
     # Delegate to management commands
     # Filter out our own flags and pass remaining args
     management_main(argv)
