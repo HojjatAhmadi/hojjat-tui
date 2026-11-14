@@ -24,7 +24,7 @@ from rich.panel import Panel
 
 try:
     from pyfiglet import Figlet
-except ImportError:  # Keep the TUI usable before optional dependencies are installed.
+except ImportError:
     Figlet = None
 
 from hojjat_tui import __version__
@@ -37,16 +37,13 @@ from hojjat_tui.chain import (
     create_chain, add_step, literal, output_of,
 )
 from hojjat_tui.persistence import Database
-from hojjat_tui.auth import AuthenticationService
-from hojjat_tui.screens.welcome import WelcomeScreen
-from hojjat_tui.screens.first_run import FirstRunScreen
 
 logger = logging.getLogger("hojjat_tui.tui")
 
 def _build_logo() -> str:
     """Render a compact HOJJAT TUI wordmark with pyfiglet when available."""
     try:
-        columns = get_terminal_size((100, 30)).columns
+        columns = get_terminal_size((100, 50)).columns
         width = max(38, min(columns - 8, 100))
 
         if Figlet is None:
@@ -144,24 +141,15 @@ class ChainBuilder(Static):
 
 
 class ResultScreen(Screen):
-    """A full-screen view that displays the complete function output with scrolling.
-
-    Supports additional visualization modes (Table, Chart) when the underlying
-    raw output (a Python object) is supplied via *raw_output*.  The full string
-    representation is always preserved in *full_output* and never reconstructed.
-    """
+    """A full-screen view that displays the complete function output with scrolling."""
 
     BINDINGS = [Binding("escape", "back", "Back")]
-
-    # --- construction -------------------------------------------------------
 
     def __init__(self, full_output: str, raw_output: Any = None):
         super().__init__()
         self._full_output = full_output
         self._raw_output = raw_output
-        self._current_view = "raw"  # "raw" | "table" | "chart"
-
-    # --- composition --------------------------------------------------------
+        self._current_view = "raw"
 
     def compose(self) -> ComposeResult:
         with Vertical(id="result-root"):
@@ -183,10 +171,7 @@ class ResultScreen(Screen):
                 explanation = self._build_explanation()
                 yield Static(explanation, id="result-explanation")
 
-    # --- data validation ----------------------------------------------------
-
     def _can_render_table(self) -> bool:
-        """Return True when *raw_output* looks like a table-ready structure."""
         data = self._raw_output
         if not isinstance(data, list) or len(data) == 0:
             return False
@@ -194,13 +179,11 @@ class ResultScreen(Screen):
         return all(isinstance(row, supported) for row in data)
 
     def _can_render_chart(self) -> bool:
-        """Return True when *raw_output* contains enough numeric data for a chart."""
         data = self._raw_output
         numeric_values = self._extract_numeric_values(data)
         return len(numeric_values) >= 2
 
     def _build_explanation(self) -> str:
-        """Return a human-readable explanation for disabled modes."""
         parts: List[str] = []
         if not self._can_render_table():
             parts.append("Table view is not supported for this output")
@@ -210,11 +193,6 @@ class ResultScreen(Screen):
 
     @staticmethod
     def _extract_numeric_values(data: Any) -> List[float]:
-        """Flatten *data* collecting every int/float value found.
-
-        Supports: scalar numbers, flat lists of numbers, and lists of tuples/lists
-        whose elements are numeric.  Mixed or invalid entries are skipped.
-        """
         values: List[float] = []
 
         def _flatten(item: Any):
@@ -226,20 +204,15 @@ class ResultScreen(Screen):
             elif isinstance(item, (list, tuple)):
                 for sub in item:
                     _flatten(sub)
-            # dicts, strings, None and other types are intentionally skipped
 
         _flatten(data)
         return values
 
-    # --- rendering ----------------------------------------------------------
-
     def _render_table(self) -> str:
-        """Render *raw_output* as a Rich table and return its string form."""
         data = self._raw_output
         if not data:
             return "(empty table data)"
 
-        # Determine headers / column count
         if isinstance(data[0], dict):
             headers = list(data[0].keys())
             rows = [[str(row.get(h, "")) for h in headers] for row in data]
@@ -260,13 +233,11 @@ class ResultScreen(Screen):
                 row += [""] * (len(headers) - len(row))
             table.add_row(*row[: len(headers)])
 
-        # Render the Rich Table to a plain string via Console.export_text
         console = Console(force_terminal=False, no_color=True, width=80, record=True)
         console.print(table)
         return console.export_text()
 
     def _render_chart(self) -> str:
-        """Render *raw_output* as a simple text-based horizontal bar chart."""
         values = self._extract_numeric_values(self._raw_output)
         if len(values) < 2:
             return "(not enough numeric data for a chart)"
@@ -302,11 +273,8 @@ class ResultScreen(Screen):
         self.refresh_scrollbars()
 
     def refresh_scrollbars(self):
-        """Re-trigger layout so the scroll area updates its bars."""
         sv = self.query_one("#result-scroll", VerticalScroll)
         sv.refresh()
-
-    # --- event handlers -----------------------------------------------------
 
     def on_button_pressed(self, event: Button.Pressed):
         btn_id = event.button.id
@@ -580,25 +548,27 @@ class HojjatTUIApplication(App):
         width: 1fr;
         padding: 0 1;
     }
+
+    /* استایل‌های مربوط به Chain Builder و اجرای چین */
     #chain-builder-actions, 
     #exec-chain-actions, 
-    #chain-exec-actions {
+    #chain-exec-actions,
+    #step-config-actions {
         height: auto;
         min-height: 3;
         margin-top: 1;
         align: left middle;
     }
 
-    /* تنظیم دکمه‌های داخل این کانتینرها تا له نشن */
     #chain-builder-actions Button,
     #exec-chain-actions Button,
-    #chain-exec-actions Button {
+    #chain-exec-actions Button,
+    #step-config-actions Button {
         min-width: 16;
         min-height: 3;
         margin-right: 1;
     }
 
-    /* تنظیم ارتفاع لیست‌های داینامیک تا دکمه‌های زیرشون رو به بیرون هول ندن */
     #content-area OptionList {
         height: auto;
         max-height: 10;
@@ -627,7 +597,6 @@ class HojjatTUIApplication(App):
         ("f", "focus_functions", "Focus Function List"),
         ("c", "focus_chains", "Focus Chains"),
         ("s", "show_settings", "Settings"),
-        ("l", "logout", "Logout"),
     ]
 
     def __init__(self):
@@ -641,13 +610,8 @@ class HojjatTUIApplication(App):
         self._form_widgets: List = []
         self._last_result_output: str = ""
         self._last_result_raw: Any = None
-        self.auth_service: Optional[AuthenticationService] = None
-        self._authenticated: bool = False
 
-        # Chain execution state
         self._selected_execute_chain: Optional[str] = None
-
-        # Chain building state
         self._chain_builder_mode: bool = False
         self._chain_being_built: Optional[Chain] = None
         self._chain_step_params: Dict[str, List[ParameterBinding]] = {}
@@ -686,31 +650,11 @@ class HojjatTUIApplication(App):
 
     async def on_mount(self) -> None:
         await self.init_db()
-        self.auth_service = AuthenticationService(self.db)
-
-        # Require authentication before showing the main TUI.
-        has_users = self.auth_service.has_users()
-        if not has_users:
-            self.push_screen(FirstRunScreen(self.auth_service), callback=self._on_auth_result)
-        else:
-            self.push_screen(WelcomeScreen(self.auth_service), callback=self._on_auth_result)
-
-    def _on_auth_result(self, result: bool) -> None:
-        if result is True:
-            self._authenticated = True
-            self.run_worker(self._after_auth, exclusive=True)
-        else:
-            self.exit()
-
-    async def _after_auth(self) -> None:
         await self.refresh_functions()
         await self.status_update("Ready — select a function to run")
 
     async def status_update(self, msg: str):
         self.query_one("#status-bar", Static).update(msg)
-        # await self._set_content_text(
-        #     msg
-        # )
 
     async def _set_content_text(self, text: str):
         content_area = self.query_one("#content-area", VerticalScroll)
@@ -787,10 +731,10 @@ class HojjatTUIApplication(App):
             await self._on_save_chain()
         elif btn == "chain-cancel-btn":
             await self._on_cancel_chain_builder()
-        elif btn == "exec-chain-btn":
-            await self.show_chain_execution()
         elif btn == "run-chain-btn":
             await self._on_exec_chain_pressed()
+        elif btn == "exec-chain-cancel-btn":
+            await self.update_chains_view()
         elif btn == "run-chain-execute":
             await self._on_run_chain_execute_pressed()
         elif btn == "run-chain-cancel":
@@ -814,12 +758,12 @@ class HojjatTUIApplication(App):
 
     async def on_option_list_option_selected(self, event: OptionList.OptionSelected):
         option_id = event.option_id
-        # Chain Builder: selecting a function adds it as a step.  Never open the
-        # standalone Execute Function screen from the chain step selector.
+
         if self._chain_builder_mode and event.option_list is not None and event.option_list.id == "chain-step-selector":
             if option_id and option_id in self.registry:
                 await self._on_add_step_to_chain(option_id)
             return
+
         if self.current_view == "functions":
             if not option_id or option_id not in self.registry:
                 self.selected = None
@@ -899,7 +843,6 @@ class HojjatTUIApplication(App):
         menu.clear_options()
         menu.add_option(Option("Clear Execution History", "clear-history"))
         menu.add_option(Option("Reset Database (Clear All Data)", "reset-db"))
-        menu.add_option(Option("Logout", "logout"))
         await self._set_content_text(
             "Settings: Use arrow keys to navigate, Enter to select."
         )
@@ -914,9 +857,8 @@ class HojjatTUIApplication(App):
                 pass
         self._form_widgets.clear()
         self._dynamic_inputs.clear()
-        self._current_form_function = None  # اضافه شد
+        self._current_form_function = None
         self.selected = None
-        # Clear residual children as a defensive measure, preventing duplicate IDs.
         try:
             await content_area.remove_children()
         except Exception:
@@ -1047,7 +989,7 @@ class HojjatTUIApplication(App):
 
     async def _clear_content_area_buttons(self) -> None:
         """Remove any previously mounted 'Show Result' button from the content area."""
-        content_area = self.query_one("#content-area", Static)
+        content_area = self.query_one("#content-area", VerticalScroll)
         try:
             btn = content_area.query_one("#show-result-btn", Button)
             await btn.remove()
@@ -1129,8 +1071,6 @@ class HojjatTUIApplication(App):
     async def show_chain_creation(self):
         """Show the chain builder interface."""
         self._chain_builder_mode = True
-        # Use a placeholder name to avoid validation errors during initialization;
-        # the real name will be entered by the user and validated on save.
         self._chain_being_built = create_chain("new-chain", "New Chain", "")
         self._chain_step_params = {}
         await self._render_chain_builder()
@@ -1151,10 +1091,6 @@ class HojjatTUIApplication(App):
 
         chain = self._chain_being_built
 
-        # Preserve metadata the user typed into the inputs before rebuilding.
-        # The chain object is the source of truth, so sync in-flight edits
-        # back into it first; this keeps name/label/desc intact across add /
-        # move / remove / configure operations.
         first_render = self._chain_name_input is None
         if not first_render:
             chain.name = self._chain_name_input.value.strip()
@@ -1165,12 +1101,9 @@ class HojjatTUIApplication(App):
             Static("[bold cyan]Chain Builder[/bold cyan]", id="chain-builder-heading")
         )
 
-        # Chain metadata inputs
         self._chain_name_input = Input(placeholder="Chain name (required)", id="chain-name-input")
         self._chain_label_input = Input(placeholder="Display label", id="chain-label-input")
         self._chain_desc_input = Input(placeholder="Description (optional)", id="chain-desc-input")
-        # First render starts with an empty name (user must enter a valid
-        # name); subsequent renders restore the value the user entered.
         self._chain_name_input.value = "" if first_render else chain.name
         self._chain_label_input.value = chain.label or ""
         self._chain_desc_input.value = chain.description or ""
@@ -1182,7 +1115,6 @@ class HojjatTUIApplication(App):
         await content_area.mount(Label("Description:"))
         await content_area.mount(self._chain_desc_input)
 
-        # Step selector — shows all registered functions
         await content_area.mount(Label("[bold]Add Step — Select a function:[/bold]"))
         step_selector = OptionList(id="chain-step-selector")
         for fname in sorted(self.registry.keys()):
@@ -1193,12 +1125,10 @@ class HojjatTUIApplication(App):
             step_selector.add_option(Option(show, fname))
         await content_area.mount(step_selector)
 
-        # Show current steps (in execution order)
         await content_area.mount(Label("[bold]CHAIN STEPS — Execution Order[/bold]"))
         for i, step in enumerate(chain.steps):
             await content_area.mount(self._step_row(step, i, len(chain.steps)))
 
-        # Action buttons
         action_container = Horizontal(id="chain-builder-actions")
         await content_area.mount(action_container)
         save_btn = Button("Save Chain", id="chain-save-btn", variant="success")
@@ -1269,7 +1199,6 @@ class HojjatTUIApplication(App):
             else:
                 await self.status_update("[red]Invalid chain selected[/red]")
         except OptionDoesNotExist:
-            # No chain selector available — likely no chains saved yet
             await self.status_update("[red]No chains available to execute[/red]")
 
     async def _on_add_step_to_chain(self, function_name: str):
@@ -1277,7 +1206,6 @@ class HojjatTUIApplication(App):
         chain = self._chain_being_built
         step = add_step(chain, function_name)
 
-        # Auto-configure parameters: use defaults where available, literal otherwise
         func_meta = self.registry.get(function_name, {})
         sig = func_meta.get("signature")
         defaults = func_meta.get("defaults", {})
@@ -1360,7 +1288,6 @@ class HojjatTUIApplication(App):
         chain = self._chain_being_built
         chain.steps = [s for s in chain.steps if s.uuid != step_uuid]
         chain.steps.sort(key=lambda s: s.order)
-        # Renumber orders
         for i, step in enumerate(chain.steps):
             step.order = i
 
@@ -1397,7 +1324,6 @@ class HojjatTUIApplication(App):
         name = chain.name
         label = chain.label
 
-        # Get values from inputs
         if self._chain_name_input:
             name = self._chain_name_input.value.strip()
         if self._chain_label_input:
@@ -1412,7 +1338,6 @@ class HojjatTUIApplication(App):
         chain.name = name
         chain.label = label or name
 
-        # Validate
         errors = validate_chain(chain)
         if errors:
             await self.status_update(f"[red]Validation errors: {'; '.join(errors)}[/red]")
@@ -1475,14 +1400,7 @@ class HojjatTUIApplication(App):
         await self.status_update(f"Loaded {len(chains)} chain(s) — select one to execute")
 
     async def _on_execute_selected_chain(self, chain_name: str):
-        """Load a saved chain, gather any required user input, then execute it.
-
-        Steps that derive all their parameter values from literals or from a
-        previous step's output are executed immediately.  Parameters bound to
-        ``user_input`` (or any binding that has no resolvable value) are surfaced
-        as input controls and the user is asked to press the **Run Chain**
-        button once they have been filled in.
-        """
+        """Load a saved chain, gather any required user input, then execute it."""
         chain = load_chain(chain_name)
         if not chain:
             await self.status_update(f"[red]Chain '{chain_name}' not found[/red]")
@@ -1497,9 +1415,8 @@ class HojjatTUIApplication(App):
             Static(f"Description: {chain.description or 'None'}")
         )
 
-        # --- collect parameters that require user input -------------------
         registry = get_registry()
-        user_input_bindings: List[tuple] = []  # (step_index, binding, input_widget)
+        user_input_bindings: List[tuple] = []
         needs_input = False
 
         for i, step in enumerate(chain.steps):
@@ -1552,8 +1469,6 @@ class HojjatTUIApplication(App):
             Horizontal(run_btn, cancel_btn, id="chain-exec-actions")
         )
 
-        # If nothing requires user input, execute straight away so the user
-        # isn't forced to press another button to see results.
         self._selected_execute_chain = chain_name
         if not needs_input:
             await self._do_execute_selected_chain(chain_name, {})
@@ -1576,7 +1491,6 @@ class HojjatTUIApplication(App):
 
         user_inputs: Dict[str, str] = dict(extra_user_inputs or {})
         if extra_user_inputs is None:
-            # Gather values from any input widgets still present on screen.
             try:
                 for w in content_area.query(Input):
                     if w.id and w.id.startswith("ui-"):
@@ -1637,7 +1551,6 @@ class HojjatTUIApplication(App):
             if ok:
                 final_output = result.output
 
-        # Final summary
         if execution.status == ChainStatus.SUCCESS:
             await content_area.mount(
                 Static(f"[green]Final result: {final_output!s}[/green]")
@@ -1649,7 +1562,6 @@ class HojjatTUIApplication(App):
                 )
             )
 
-        # Save execution to database
         try:
             db = self.db or Database()
             db.save_chain_execution(chain_name, execution.status.value)
@@ -1681,7 +1593,6 @@ class HojjatTUIApplication(App):
                 detail = f"[bold]{chain.label}[/bold]\n\nName: {chain.name}\n"
                 detail += f"Description: {chain.description or 'None'}\n\n"
 
-                # Validate and show validation status
                 errors = validate_chain(chain)
                 if errors:
                     detail += f"[red]Validation errors:[/red]\n"
@@ -1705,7 +1616,6 @@ class HojjatTUIApplication(App):
                             detail += f"     • {p.name}: output of step {p.source_step_uuid[:8]}"
                         detail += "\n"
 
-                # Add execute button for this specific chain
                 detail += f"\n[green]Use 'Execute Chain' button to run this chain.[/green]"
                 await self._set_content_text(detail)
             else:
@@ -1723,7 +1633,6 @@ class HojjatTUIApplication(App):
         if setting_id == "clear-history":
             try:
                 db = self.db or Database()
-                # Only clear function history if the database supports this method.
                 if hasattr(db, "clear_execution_history"):
                     db.clear_execution_history()
                 await self._set_content_text("Execution history cleared.")
@@ -1752,7 +1661,6 @@ class HojjatTUIApplication(App):
                 await self._set_content_text(f"[red]Database reset failed:[/red] {e}")
                 await self.status_update("Database reset failed")
                 return
-            # Clear in-memory chain-builder / execution state and refresh views.
             self._chain_being_built = None
             self._chain_step_params = {}
             self._selected_execute_chain = None
@@ -1762,27 +1670,12 @@ class HojjatTUIApplication(App):
                 "Database has been reset. All persisted data was cleared."
             )
             await self.status_update("Database reset complete")
-        elif setting_id == "logout":
-            self.action_logout()
 
     def action_refresh(self):
         self.run_worker(self.refresh_functions, exclusive=True)
 
     def action_quit(self):
         self.exit()
-
-    def action_logout(self):
-        """Return to the login screen without terminating the application."""
-        self.run_worker(self._do_logout, exclusive=True)
-
-    async def _do_logout(self):
-        self._authenticated = False
-        result = await self.push_screen(WelcomeScreen(self.auth_service))
-        if result is True:
-            self._authenticated = True
-            await self.status_update("Logged in")
-        else:
-            self.exit()
 
     def action_focus_functions(self):
         self.current_view = "functions"

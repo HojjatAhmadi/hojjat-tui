@@ -5,6 +5,24 @@ All notable changes to HOJJAT TUI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.8] - 2026-11-14
+
+### Changed
+
+- Removed mandatory Welcome / Login screen from default application startup
+- Removed mandatory first-run account registration from default application startup
+- Removed authentication checks that blocked normal application usage
+- Removed Logout binding and Settings menu option (no longer applicable without auth)
+- `python manage.py run` now launches directly into the main TUI interface
+
+### Preserved
+
+- `src/hojjat_tui/auth.py`, `src/hojjat_tui/screens/welcome.py`, and
+  `src/hojjat_tui/screens/first_run.py` remain available for optional
+  future authentication support
+- Function Registry, `@hojjat_function()` decorator, Chain Engine, and
+  all existing public APIs remain unchanged
+
 ## [1.4.8] - 2026-11-14
 
 ### Fixed
