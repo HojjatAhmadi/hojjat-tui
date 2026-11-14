@@ -38,6 +38,40 @@ class FunctionResult:
         else:
             return f"Error: {self.error}"
 
+
+@dataclass
+class ChartOutput:
+    """Explicit chart output for bar and line charts.
+
+    Functions return a :class:`ChartOutput` instance to declare that their
+    result should be rendered as a chart rather than as a table or text.
+
+    Attributes:
+        chart_type: Either ``"bar"`` or ``"line"``.
+        labels: Category labels for the x-axis.
+        values: Numeric values for each label.
+        title: Optional chart title.
+    """
+
+    chart_type: str
+    labels: List[str]
+    values: List[float]
+    title: str = ""
+
+    def __post_init__(self):
+        if self.chart_type not in ("bar", "line"):
+            raise ValueError(
+                f"Invalid chart type: {self.chart_type!r}. "
+                "Must be 'bar' or 'line'."
+            )
+        if len(self.labels) != len(self.values):
+            raise ValueError(
+                f"Labels and values must have the same length "
+                f"({len(self.labels)} labels vs {len(self.values)} values)."
+            )
+        if not self.labels:
+            raise ValueError("Chart must have at least one label/value pair.")
+
 # Global registry
 _REGISTRY: Dict[str, Callable] = {}
 # Execution logger

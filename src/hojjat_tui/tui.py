@@ -28,7 +28,7 @@ except ImportError:
     Figlet = None
 
 from hojjat_tui import __version__
-from hojjat_tui.function import get_registry, load_function_modules
+from hojjat_tui.function import get_registry, load_function_modules, ChartOutput
 from hojjat_tui.executor import execute_function
 from hojjat_tui.chain import (
     Chain, ChainStep, ParameterBinding, BindingType, ChainStatus,
@@ -149,12 +149,19 @@ class ResultScreen(Screen):
         super().__init__()
         self._full_output = full_output
         self._raw_output = raw_output
-        self._current_view = "raw"
+        # Auto-detect chart output and start in chart view.
+        if isinstance(raw_output, ChartOutput):
+            self._current_view = "chart"
+        else:
+            self._current_view = "raw"
 
     def compose(self) -> ComposeResult:
         with Vertical(id="result-root"):
             with VerticalScroll(id="result-scroll"):
-                yield Static(self._full_output, id="full-result", expand=True)
+                if isinstance(self._raw_output, ChartOutput):
+                    yield Static(self._render_chart_from_output(), id="full-result", expand=True)
+                else:
+                    yield Static(self._full_output, id="full-result", expand=True)
             with Horizontal(id="result-screen-button-bar"):
                 yield Button("Back", id="back-btn", variant="primary")
                 self._table_btn = Button(
@@ -180,6 +187,8 @@ class ResultScreen(Screen):
 
     def _can_render_chart(self) -> bool:
         data = self._raw_output
+        if isinstance(data, ChartOutput):
+            return True
         numeric_values = self._extract_numeric_values(data)
         return len(numeric_values) >= 2
 
@@ -238,7 +247,11 @@ class ResultScreen(Screen):
         return console.export_text()
 
     def _render_chart(self) -> str:
-        values = self._extract_numeric_values(self._raw_output)
+        """Render chart output from raw data (legacy path) or ChartOutput."""
+        data = self._raw_output
+        if isinstance(data, ChartOutput):
+            return self._render_chart_output(data)
+        values = self._extract_numeric_values(data)
         if len(values) < 2:
             return "(not enough numeric data for a chart)"
 
@@ -252,6 +265,83 @@ class ResultScreen(Screen):
             lines.append(f"{i:>4}  [{bar_str}] {val}")
         return "\n".join(lines)
 
+    def _render_chart_output(self, chart: ChartOutput) -> str:
+        """Render a :class:`ChartOutput` as ASCII art (bar or line chart)."""
+        if not chart.labels:
+            return "(no chart data)"
+
+        max_val = max(chart.values) if chart.values and max(chart.values) > 0 else 1.0
+        bar_width = 40
+        lines: List[str] = []
+
+        if chart.title:
+            lines.append(f"[bold]{chart.title}[/bold]")
+            lines.append("")
+
+        if chart.chart_type == "bar":
+            lines.append(self._render_bar_chart(chart, max_val, bar_width))
+        elif chart.chart_type == "line":
+            lines.append(self._render_line_chart(chart, max_val, bar_width))
+
+        return "\n".join(lines)
+
+    def _render_bar_chart(self, chart: ChartOutput, max_val: float, bar_width: int) -> str:
+        """Render a vertical ASCII bar chart."""
+        lines: List[str] = []
+        # Header with labels
+        label_line = "      " + "  ".join(l[:8].center(8) for l in chart.labels)
+        lines.append(label_line)
+        lines.append("      " + "  ".join("-" * 8 for _ in chart.labels))
+
+        for level in range(10, -1, -1):
+            threshold = max_val * (level / 10.0)
+            row = f"{level*10:>3}% |"
+            for val in chart.values:
+                if val >= threshold:
+                    row += "  ██████  "
+                else:
+                    row += "          "
+            lines.append(row)
+
+        # Value line
+        val_line = "      " + "  ".join(f"{v:<8.1f}" for v in chart.values)
+        lines.append(val_line)
+        return "\n".join(lines)
+
+    def _render_line_chart(self, chart: ChartOutput, max_val: float, bar_width: int) -> str:
+        """Render a simple ASCII line chart."""
+        lines: List[str] = []
+        height = 10
+
+        # Normalize values to 0-height range
+        if max_val <= 0:
+            normalized = [0] * len(chart.values)
+        else:
+            normalized = [int(round((v / max_val) * height)) for v in chart.values]
+
+        # Build rows from top to bottom
+        for row in range(height, -1, -1):
+            line = f"{row*10:>3}% |"
+            for n in normalized:
+                if n >= row:
+                    line += "  ●   "
+                else:
+                    line += "      "
+            lines.append(line)
+
+        # X-axis labels
+        label_line = "      " + "  ".join(l[:5].center(5) for l in chart.labels)
+        lines.append(label_line)
+        val_line = "      " + "  ".join(f"{v:<5.1f}" for v in chart.values)
+        lines.append(val_line)
+        return "\n".join(lines)
+
+    def _render_chart_from_output(self) -> str:
+        """Render the ChartOutput for the initial chart view."""
+        if isinstance(self._raw_output, ChartOutput):
+            return self._render_chart_output(self._raw_output)
+        return self._render_chart()
+
     def _show_table(self):
         self._current_view = "table"
         renderable = self._render_table()
@@ -261,7 +351,10 @@ class ResultScreen(Screen):
 
     def _show_chart(self):
         self._current_view = "chart"
-        renderable = self._render_chart()
+        if isinstance(self._raw_output, ChartOutput):
+            renderable = self._render_chart_from_output()
+        else:
+            renderable = self._render_chart()
         self.query_one("#full-result", Static).update(renderable)
         self.query_one("#result-explanation", Static).update("")
         self.refresh_scrollbars()
@@ -627,15 +720,16 @@ class HojjatTUIApplication(App):
             with Vertical(id="menu-panel"):
                 yield Label("[bold]Navigation[/bold]")
 
+                yield Label("[bold]Functions[/bold]", id="list-label")
+                yield OptionList(id="function-list")
+
+                yield Static("", id="nav-divider")
+
                 with Horizontal(id="nav-bar"):
                     yield Button("Functions", id="nav-functions", variant="primary")
                     yield Button("Chains", id="nav-chains", variant="default")
                     yield Button("Results", id="nav-results", variant="default")
                     yield Button("Settings", id="nav-settings", variant="default")
-
-                yield Static("", id="nav-divider")
-                yield Label("[bold]Functions[/bold]", id="list-label")
-                yield OptionList(id="function-list")
 
             with Vertical(id="content-panel"):
                 with VerticalScroll(id="content-area"):
@@ -651,7 +745,16 @@ class HojjatTUIApplication(App):
     async def on_mount(self) -> None:
         await self.init_db()
         await self.refresh_functions()
+        # Focus the function list so Enter-key selection works out of the box.
+        # Use set_timer to ensure focus is applied after the first render cycle.
+        self.set_timer(0.05, self._focus_function_list)
         await self.status_update("Ready — select a function to run")
+
+    async def _focus_function_list(self) -> None:
+        try:
+            await self.query_one("#function-list", OptionList).focus()
+        except Exception:
+            pass
 
     async def status_update(self, msg: str):
         self.query_one("#status-bar", Static).update(msg)
@@ -1024,7 +1127,17 @@ class HojjatTUIApplication(App):
                     logger.exception("Failed to log function execution")
 
             if result.success:
-                if isinstance(result.output, dict):
+                if isinstance(result.output, ChartOutput):
+                    # Native chart output — store raw ChartOutput for ResultScreen.
+                    display_str = (
+                        f"[bold]{result.output.chart_type.capitalize()} Chart[/bold]\n"
+                        f"Title: {result.output.title or '(none)'}\n"
+                        f"Data points: {len(result.output.labels)}"
+                    )
+                    self._last_result_output = display_str
+                    self._last_result_raw = result.output
+                    preview = f"{result.output.chart_type.capitalize()} chart with {len(result.output.labels)} data points"
+                elif isinstance(result.output, dict):
                     display_str = json.dumps(result.output, indent=2, ensure_ascii=False)
                 elif isinstance(result.output, list) and result.type == "table":
                     table = Table(show_lines=True)

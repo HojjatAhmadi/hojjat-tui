@@ -75,11 +75,10 @@ def main(argv: Optional[List[str]] = None):
             sys.exit(1)
 
         # Execute manage.py in the current process so decorators register
-        # functions in the shared in-memory registry.
+        # functions in the shared in-memory registry and manage.py starts
+        # the TUI via its `if __name__ == "__main__": run()` block.
+        # Do NOT call run() here — that would start a second TUI instance.
         _execute_manage_py(manage_file)
-
-        # Start the TUI.
-        run()
         return
 
     if "--version" in argv or "-V" in argv:

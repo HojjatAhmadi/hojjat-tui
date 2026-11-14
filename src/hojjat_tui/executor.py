@@ -3,7 +3,7 @@ import time
 import traceback
 from typing import Any, Dict, List, Optional
 
-from hojjat_tui.function import FunctionResult, _REGISTRY, _LOGGER
+from hojjat_tui.function import FunctionResult, ChartOutput, _REGISTRY, _LOGGER
 
 logger = logging.getLogger("hojjat_tui")
 
@@ -67,6 +67,8 @@ def execute_function(name: str, args: Optional[Dict[str, Any]] = None, kwargs: O
 
 def _detect_output_type(output: Any) -> str:
     """Detect the type of output for rendering."""
+    if isinstance(output, ChartOutput):
+        return "chart"
     if isinstance(output, str):
         import re
         if re.search(r'^#|^\* |^- |^1\. ', output.strip()):

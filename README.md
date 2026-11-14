@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-HOJJAT TUI is a terminal-based user interface (TUI) tool built with Python and [Textual](https://textual.textualize.io/). It provides a registry of user-contributed functions that can run inside the terminal, render structured results (text, Markdown, tables, JSON), and chain together in future phases.
+HOJJAT TUI is a terminal-based user interface (TUI) tool built with Python and [Textual](https://textual.textualize.io/). It provides a registry of user-contributed functions that can run inside the terminal, render structured results (text, Markdown, tables, charts, JSON), and chain together in future phases.
 
 > **Note**: This is Phase 1 — a stable package foundation with a working end-to-end user journey through the TUI.
 
@@ -14,7 +14,7 @@ HOJJAT TUI is a terminal-based user interface (TUI) tool built with Python and [
 
 - **Function Registry**: Register Python functions with metadata via the `@hojjat_function` decorator
 - **TUI Interface**: Navigate registered functions and enter parameters in an interactive Textual UI
-- **Structured Output**: Render results as text, Markdown, tables, JSON, and error/info panels
+- **Structured Output**: Render results as text, Markdown, tables, charts, JSON, and error/info panels
 - **Persistence**: SQLite database for user metadata and execution logs
 - **Password Security**: bcrypt-hashed administrative passwords
 - **Management Commands**: Django-style `manage.py` interface for init, user management, running, checking, and testing
@@ -134,10 +134,11 @@ The generated `example.py` contains six functions:
 
 1. **`hello_world`** — Simple string output (no parameters)
 2. **`sample_data`** — Table output (list of dicts)
-3. **`monthly_sales`** — Chart output (numeric data rendered as ASCII bar chart)
-4. **`greet_user`** — Input parameter (typed `name: str` parameter)
-5. **`system_info`** — JSON output (dict returned as formatted JSON)
-6. **`error_demo`** — Error handling (raises `RuntimeError`)
+3. **`sales_by_region`** — Bar chart output (ChartOutput with `chart_type="bar"`)
+4. **`temperature_trend`** — Line chart output (ChartOutput with `chart_type="line"`)
+5. **`greet_user`** — Input parameter (typed `name: str` parameter)
+6. **`system_info`** — JSON output (dict returned as formatted JSON)
+7. **`error_demo`** — Error handling (raises `RuntimeError`)
 
 Each function has docstrings explaining what it demonstrates and what to expect in the TUI.
 
@@ -326,6 +327,7 @@ Function results are rendered based on their detected output type:
 | **text** | Plain text output |
 | **markdown** | Markdown content (rendered with Rich) |
 | **table** | List of dicts or list of lists rendered as a table |
+| **chart** | ChartOutput (bar or line chart rendered as ASCII art) |
 | **json** | Dict or JSON-compatible objects |
 | **error** | Error messages in a red panel |
 | **info** | Informational messages in a blue panel |
@@ -367,34 +369,73 @@ When `get_users()` is executed, the TUI automatically renders the output as a ta
 
 ## Chart Example
 
-Functions can return numeric data that the TUI displays as a simple text-based horizontal bar chart. The chart renderer extracts numeric values from the output and displays them as bars.
+Functions can return chart data that the TUI displays as a text-based bar or line chart. To explicitly declare chart output, return a `ChartOutput` instance from your function:
 
-### Practical Example
+```python
+from hojjat_tui.function import hojjat_function, ChartOutput
+
+@hojjat_function(
+    name="sales_by_region",
+    label="Sales by Region",
+    description="Return regional sales as a bar chart.",
+)
+def sales_by_region() -> ChartOutput:
+    return ChartOutput(
+        chart_type="bar",
+        labels=["North", "South", "East", "West", "Central"],
+        values=[12400, 9800, 15600, 11200, 13400],
+        title="Regional Sales Q3",
+    )
+```
+
+When `sales_by_region()` is executed, the TUI automatically detects the `ChartOutput` and renders a bar chart:
+
+```
+    Title: Regional Sales Q3
+    Data points: 5
+
+          North   South   East    West   Central
+          ------- ------- ------- ------- -------
+  100%  |  ██████  ██████  ██████  ██████  ██████
+   90%  |                                   ██████
+   80%  |                                   ██████
+   70%  |              ██████  ██████  ██████
+   60%  |              ██████  ██████  ██████
+   50%  |                                    ██████
+   40%  |              ██████         ██████
+   30%  |              ██████         ██████
+   20%  |              ██████         ██████
+   10%  |                                    ██████
+    0%  |              12400.0  9800.0  15600.0  11200.0  13400.0
+```
+
+For a line chart, use `chart_type="line"`:
 
 ```python
 @hojjat_function(
-    name="get_monthly_sales",
-    label="Monthly Sales",
-    description="Return monthly sales figures",
-    annotations={},
-    defaults={},
-    required=[],
+    name="temperature_trend",
+    label="Temperature Trend",
+    description="Return daily temperatures as a line chart.",
 )
-def get_monthly_sales() -> list:
-    return [120, 180, 150, 220, 300]
+def temperature_trend() -> ChartOutput:
+    return ChartOutput(
+        chart_type="line",
+        labels=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        values=[68, 72, 75, 73, 78, 81, 76],
+        title="Weekly Temperature",
+    )
 ```
 
-When `get_monthly_sales()` is executed, the TUI displays a text-based horizontal bar chart:
+**Chart access in TUI**: When a function returns `ChartOutput`, the TUI automatically renders the chart — no need to press a manual **Chart** button. The chart is shown directly in the result screen.
 
-```
-    0   [###############################] 120
-    1   [#################################] 180
-    2   [#######################         ] 150
-    3   [############################### ] 220
-    4   [#################################] 300
-```
+**Chart API**: `ChartOutput(chart_type="bar"|"line", labels=[...], values=[...], title="...")`
 
-**Chart access in TUI**: After executing a function with numeric output, press the **Chart** button in the result screen to view the bar chart.
+- `chart_type`: Either `"bar"` or `"line"`
+- `labels`: Category labels for the x-axis (strings)
+- `values`: Numeric values for each label (floats or ints)
+- `title`: Optional chart title
+
+Charts require at least one label/value pair, and labels and values must have the same length.
 
 ---
 

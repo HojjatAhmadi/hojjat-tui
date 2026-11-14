@@ -75,14 +75,18 @@ class TestProjectInitialization:
         example_py = tmp_path / "functions" / "example.py"
         content = example_py.read_text(encoding="utf-8")
 
-        # Check all four required example functions exist
+        # Check all required example functions exist
         assert "def hello_world" in content
         assert "def sample_data" in content
-        assert "def monthly_sales" in content
+        assert "def sales_by_region" in content
+        assert "def temperature_trend" in content
         assert "def greet_user" in content
 
         # Check they are decorated with @hojjat_function
         assert "@hojjat_function" in content
+
+        # Check ChartOutput is imported
+        assert "ChartOutput" in content
 
     def test_init_does_not_overwrite_existing_files(self, tmp_path, monkeypatch):
         """init does not overwrite existing files."""
@@ -194,10 +198,11 @@ class TestExampleFunctions:
 
         registry = get_registry()
 
-        # All four required functions should be registered
+        # All required functions should be registered
         assert "hello_world" in registry
         assert "sample_data" in registry
-        assert "monthly_sales" in registry
+        assert "sales_by_region" in registry
+        assert "temperature_trend" in registry
         assert "greet_user" in registry
 
     def test_hello_world_returns_string(self, tmp_path, monkeypatch):
@@ -225,18 +230,35 @@ class TestExampleFunctions:
         assert result.output[0]["name"] == "Project Alpha"
         assert result.type == "table"
 
-    def test_monthly_sales_returns_chart_data(self, tmp_path, monkeypatch):
-        """monthly_sales returns data with numeric values for chart rendering."""
+    def test_bar_chart_returns_chart_output(self, tmp_path, monkeypatch):
+        """sales_by_region returns a ChartOutput with chart_type='bar'."""
         self._import_example(tmp_path, monkeypatch)
 
         from hojjat_tui.executor import execute_function
+        from hojjat_tui.function import ChartOutput
 
-        result = execute_function("monthly_sales")
+        result = execute_function("sales_by_region")
         assert result.success
-        assert isinstance(result.output, list)
-        assert len(result.output) == 6
-        assert result.output[0]["month"] == "Jan"
-        assert result.output[0]["sales"] == 12400
+        assert isinstance(result.output, ChartOutput)
+        assert result.output.chart_type == "bar"
+        assert len(result.output.labels) == 5
+        assert len(result.output.values) == 5
+        assert result.output.title == "Regional Sales Q3"
+
+    def test_line_chart_returns_chart_output(self, tmp_path, monkeypatch):
+        """temperature_trend returns a ChartOutput with chart_type='line'."""
+        self._import_example(tmp_path, monkeypatch)
+
+        from hojjat_tui.executor import execute_function
+        from hojjat_tui.function import ChartOutput
+
+        result = execute_function("temperature_trend")
+        assert result.success
+        assert isinstance(result.output, ChartOutput)
+        assert result.output.chart_type == "line"
+        assert len(result.output.labels) == 7
+        assert len(result.output.values) == 7
+        assert result.output.title == "Weekly Temperature"
 
     def test_greet_user_accepts_parameter(self, tmp_path, monkeypatch):
         """greet_user accepts a name parameter and uses it."""
@@ -261,7 +283,7 @@ class TestExampleFunctions:
         from hojjat_tui.function import get_registry
 
         registry = get_registry()
-        expected = {"hello_world", "sample_data", "monthly_sales", "greet_user"}
+        expected = {"hello_world", "sample_data", "sales_by_region", "temperature_trend", "greet_user"}
         assert expected.issubset(set(registry.keys()))
 
 
@@ -310,3 +332,79 @@ class TestRefreshBehavior:
         registry2 = get_registry()
         assert "hello_world" in registry2
         assert len(registry2) == len(registry)  # No duplicates
+
+
+class TestChartOutput:
+    """Tests for native Chart output detection and validation."""
+
+    def test_chart_output_detected_as_chart_type(self, tmp_path, monkeypatch):
+        """ChartOutput is detected as 'chart' output type."""
+        _setup_test_path(tmp_path, monkeypatch)
+
+        from hojjat_tui.function import ChartOutput
+        from hojjat_tui.executor import _detect_output_type
+
+        chart = ChartOutput(
+            chart_type="bar",
+            labels=["Jan", "Feb", "Mar"],
+            values=[100, 150, 200],
+        )
+        assert _detect_output_type(chart) == "chart"
+
+    def test_ordinary_list_detected_as_table(self, tmp_path, monkeypatch):
+        """Ordinary list of dicts is still detected as 'table', not 'chart'."""
+        _setup_test_path(tmp_path, monkeypatch)
+
+        from hojjat_tui.executor import _detect_output_type
+
+        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+        assert _detect_output_type(data) == "table"
+
+    def test_list_of_numbers_detected_as_table(self, tmp_path, monkeypatch):
+        """List of numbers is detected as 'table', not 'chart'."""
+        _setup_test_path(tmp_path, monkeypatch)
+
+        from hojjat_tui.executor import _detect_output_type
+
+        data = [1, 2, 3, 4]
+        assert _detect_output_type(data) == "table"
+
+    def test_chart_output_invalid_type_raises(self, tmp_path, monkeypatch):
+        """Invalid chart_type raises ValueError."""
+        _setup_test_path(tmp_path, monkeypatch)
+
+        from hojjat_tui.function import ChartOutput
+
+        with pytest.raises(ValueError, match="Invalid chart type"):
+            ChartOutput(
+                chart_type="pie",
+                labels=["a", "b"],
+                values=[1, 2],
+            )
+
+    def test_chart_output_mismatched_lengths_raises(self, tmp_path, monkeypatch):
+        """Mismatched labels and values lengths raises ValueError."""
+        _setup_test_path(tmp_path, monkeypatch)
+
+        from hojjat_tui.function import ChartOutput
+
+        with pytest.raises(ValueError, match="same length"):
+            ChartOutput(
+                chart_type="bar",
+                labels=["a", "b", "c"],
+                values=[1, 2],
+            )
+
+    def test_chart_output_empty_labels_raises(self, tmp_path, monkeypatch):
+        """Empty labels raises ValueError."""
+        _setup_test_path(tmp_path, monkeypatch)
+
+        from hojjat_tui.function import ChartOutput
+
+        with pytest.raises(ValueError, match="at least one"):
+            ChartOutput(
+                chart_type="bar",
+                labels=[],
+                values=[],
+            )
+

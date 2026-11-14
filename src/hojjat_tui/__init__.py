@@ -1,6 +1,6 @@
 """HOJJAT TUI — a terminal UI for running registered Python functions."""
 
-from hojjat_tui.function import hojjat_function, FunctionResult, register, get_registry
+from hojjat_tui.function import hojjat_function, FunctionResult, ChartOutput, register, get_registry
 from hojjat_tui.executor import execute_function
 
 __version__ = "2.0.0"
@@ -39,6 +39,7 @@ __all__ = [
     "__version__",
     "hojjat_function",
     "FunctionResult",
+    "ChartOutput",
     "register",
     "get_registry",
     "execute_function",

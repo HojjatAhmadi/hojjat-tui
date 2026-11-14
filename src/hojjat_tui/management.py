@@ -61,15 +61,15 @@ Import your function modules here, or import them directly in manage.py.
 
 EXAMPLE_PY_TEMPLATE = '''"""Example HOJJAT TUI functions.
 
-This file demonstrates four different function patterns that you can
-register with the @hojjat_function() decorator. All four functions will be
+This file demonstrates different function patterns that you can
+register with the @hojjat_function() decorator. All functions will be
 visible in the TUI once this module is imported (see manage.py).
 
 To add your own functions, create new modules in this package and import
 them from manage.py.
 """
 
-from hojjat_tui.function import hojjat_function, FunctionResult
+from hojjat_tui.function import hojjat_function, FunctionResult, ChartOutput
 
 
 # ---------------------------------------------------------------------------
@@ -125,39 +125,65 @@ def sample_data() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Example 3: Function returning chart data
+# Example 3: Function returning a bar chart
 # ---------------------------------------------------------------------------
 #
-# Demonstrates returning data suitable for chart rendering. The TUI's
-# ResultScreen extracts numeric values from nested lists/dicts and renders
-# them as an ASCII bar chart when at least 2 numeric values are present.
+# Demonstrates explicit bar chart output using ChartOutput. The TUI
+# automatically detects ChartOutput and renders it as a chart without
+# requiring the user to press a manual "Chart" button.
 @hojjat_function(
-    name="monthly_sales",
-    label="Monthly Sales",
-    description="Return monthly sales figures for chart visualization.",
+    name="sales_by_region",
+    label="Sales by Region",
+    description="Return regional sales as a bar chart.",
 )
-def monthly_sales() -> list[dict]:
-    """Return monthly sales figures for chart visualization.
+def sales_by_region() -> ChartOutput:
+    """Return regional sales figures as a bar chart.
 
     What it demonstrates:
-        - Returning nested data containing numeric values for charts.
-        - The TUI extracts numbers and renders an ASCII bar chart.
+        - Explicit chart output via the ChartOutput class.
+        - Bar chart rendering with categorical labels and numeric values.
+        - Automatic chart detection by the TUI (no manual button needed).
     What to expect:
-        - The TUI shows a bar chart of sales by month.
-        - Use the "Chart" button in the ResultScreen to view it.
+        - The TUI renders an ASCII bar chart of sales by region.
     """
-    return [
-        {"month": "Jan", "sales": 12400},
-        {"month": "Feb", "sales": 15800},
-        {"month": "Mar", "sales": 18600},
-        {"month": "Apr", "sales": 14200},
-        {"month": "May", "sales": 21000},
-        {"month": "Jun", "sales": 19500},
-    ]
+    return ChartOutput(
+        chart_type="bar",
+        labels=["North", "South", "East", "West", "Central"],
+        values=[12400, 9800, 15600, 11200, 13400],
+        title="Regional Sales Q3",
+    )
 
 
 # ---------------------------------------------------------------------------
-# Example 4: Function with input parameters
+# Example 4: Function returning a line chart
+# ---------------------------------------------------------------------------
+#
+# Demonstrates explicit line chart output using ChartOutput.
+@hojjat_function(
+    name="temperature_trend",
+    label="Temperature Trend",
+    description="Return daily temperatures as a line chart.",
+)
+def temperature_trend() -> ChartOutput:
+    """Return daily temperature readings as a line chart.
+
+    What it demonstrates:
+        - Explicit chart output via the ChartOutput class.
+        - Line chart rendering with time-series data.
+        - Automatic chart detection by the TUI.
+    What to expect:
+        - The TUI renders an ASCII line chart of temperatures over time.
+    """
+    return ChartOutput(
+        chart_type="line",
+        labels=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        values=[68, 72, 75, 73, 78, 81, 76],
+        title="Weekly Temperature",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Example 5: Function with input parameters
 # ---------------------------------------------------------------------------
 #
 # Demonstrates accepting typed input parameters. The TUI generates a
@@ -184,7 +210,7 @@ def greet_user(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Example 5: Function returning JSON / dict output
+# Example 6: Function returning JSON / dict output
 # ---------------------------------------------------------------------------
 #
 # Demonstrates returning a dictionary, which the TUI renders as formatted
@@ -213,7 +239,7 @@ def system_info() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Example 6: Function that can fail (error handling)
+# Example 7: Function that can fail (error handling)
 # ---------------------------------------------------------------------------
 #
 # Demonstrates what happens when a function raises an exception.
