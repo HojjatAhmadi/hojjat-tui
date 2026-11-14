@@ -4,7 +4,7 @@ Usage:
     python manage.py <command> [options]
 
 Commands:
-    init              Initialize the database (safe to rerun)
+    init              Initialize a HOJJAT TUI project structure
     createsuperuser Create a superuser account
     run               Run a registered function
     check             Check project installation
@@ -16,24 +16,287 @@ import argparse
 import getpass
 import logging
 import os
+import runpy
 import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from hojjat_tui import __version__
+from hojjat_tui import __version__, run
 from hojjat_tui.function import get_registry, load_function_modules
 from hojjat_tui.executor import execute_function
 from hojjat_tui.persistence import Database, get_default_db_path
 
 logger = logging.getLogger("hojjat_tui.management")
 
+MANAGE_PY_TEMPLATE = '''"""HOJJAT TUI project entry point.
+
+This file is the central entry point for your HOJJAT TUI project.
+Import your function modules here so their @hojjat_function() decorators
+register them before the TUI starts.
+
+Usage:
+    python manage.py          # Start the TUI
+    python manage.py run <name> [--param KEY=VALUE]  # Run a function directly
+    hojjat-tui                # Also starts the TUI (executes this file)
+"""
+
+from hojjat_tui import run
+
+# Import your function modules below.
+from functions import example
+
+
+if __name__ == "__main__":
+    run()
+'''
+
+FUNCTIONS_INIT_TEMPLATE = '''"""HOJJAT TUI function modules package.
+
+Import your function modules here, or import them directly in manage.py.
+"""
+
+
+'''
+
+EXAMPLE_PY_TEMPLATE = '''"""Example HOJJAT TUI functions.
+
+This file demonstrates four different function patterns that you can
+register with the @hojjat_function() decorator. All four functions will be
+visible in the TUI once this module is imported (see manage.py).
+
+To add your own functions, create new modules in this package and import
+them from manage.py.
+"""
+
+from hojjat_tui.function import hojjat_function, FunctionResult
+
+
+# ---------------------------------------------------------------------------
+# Example 1: Simple function with a string result
+# ---------------------------------------------------------------------------
+#
+# Demonstrates the simplest possible registered function: no input
+# parameters, returns a plain string. The TUI displays the string as text.
+@hojjat_function(
+    name="hello_world",
+    label="Hello World",
+    description="Return a simple greeting string.",
+)
+def hello_world() -> str:
+    """Return a simple greeting.
+
+    What it demonstrates:
+        - A function with no input parameters.
+        - A plain string return value.
+    What to expect:
+        - The TUI shows "Hello from HOJJAT TUI!" as text output.
+    """
+    return "Hello from HOJJAT TUI!"
+
+
+# ---------------------------------------------------------------------------
+# Example 2: Function returning a table
+# ---------------------------------------------------------------------------
+#
+# Demonstrates returning tabular data. Return a list of dicts where each
+# dict is a row and the keys are column names. The TUI detects this as
+# table output and renders it as a Rich Table.
+@hojjat_function(
+    name="sample_data",
+    label="Sample Data",
+    description="Return a table of sample project data.",
+)
+def sample_data() -> list[dict]:
+    """Return a table of sample project data.
+
+    What it demonstrates:
+        - Returning a list of dictionaries for table output.
+        - Column names derived from dictionary keys.
+    What to expect:
+        - The TUI renders a table with columns: id, name, status, score.
+    """
+    return [
+        {"id": 1, "name": "Project Alpha", "status": "active", "score": 95},
+        {"id": 2, "name": "Project Beta", "status": "pending", "score": 78},
+        {"id": 3, "name": "Project Gamma", "status": "active", "score": 88},
+        {"id": 4, "name": "Project Delta", "status": "archived", "score": 62},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Example 3: Function returning chart data
+# ---------------------------------------------------------------------------
+#
+# Demonstrates returning data suitable for chart rendering. The TUI's
+# ResultScreen extracts numeric values from nested lists/dicts and renders
+# them as an ASCII bar chart when at least 2 numeric values are present.
+@hojjat_function(
+    name="monthly_sales",
+    label="Monthly Sales",
+    description="Return monthly sales figures for chart visualization.",
+)
+def monthly_sales() -> list[dict]:
+    """Return monthly sales figures for chart visualization.
+
+    What it demonstrates:
+        - Returning nested data containing numeric values for charts.
+        - The TUI extracts numbers and renders an ASCII bar chart.
+    What to expect:
+        - The TUI shows a bar chart of sales by month.
+        - Use the "Chart" button in the ResultScreen to view it.
+    """
+    return [
+        {"month": "Jan", "sales": 12400},
+        {"month": "Feb", "sales": 15800},
+        {"month": "Mar", "sales": 18600},
+        {"month": "Apr", "sales": 14200},
+        {"month": "May", "sales": 21000},
+        {"month": "Jun", "sales": 19500},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Example 4: Function with input parameters
+# ---------------------------------------------------------------------------
+#
+# Demonstrates accepting typed input parameters. The TUI generates a
+# parameter form before execution.
+@hojjat_function(
+    name="greet_user",
+    label="Greet User",
+    description="Generate a personalized greeting for a user.",
+    annotations={"name": {"type": "str", "description": "The user's name"}},
+    defaults={"name": "Guest"},
+    required=["name"],
+)
+def greet_user(name: str) -> str:
+    """Generate a personalized greeting.
+
+    What it demonstrates:
+        - Accepting a typed input parameter (name: str).
+        - Using the parameter in the return value.
+        - The TUI builds an input form before execution.
+    What to expect:
+        - The TUI prompts for a name, then returns "Hello <name>!".
+    """
+    return f"Hello {name}!"
+
+
+# ---------------------------------------------------------------------------
+# Example 5: Function returning JSON / dict output
+# ---------------------------------------------------------------------------
+#
+# Demonstrates returning a dictionary, which the TUI renders as formatted
+# JSON.
+@hojjat_function(
+    name="system_info",
+    label="System Info",
+    description="Return system information as JSON output.",
+)
+def system_info() -> dict:
+    """Return system information as JSON output.
+
+    What it demonstrates:
+        - Returning a dictionary for JSON-formatted output.
+    What to expect:
+        - The TUI renders the dictionary as indented JSON.
+    """
+    import platform
+    import sys
+
+    return {
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "processor": platform.processor(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Example 6: Function that can fail (error handling)
+# ---------------------------------------------------------------------------
+#
+# Demonstrates what happens when a function raises an exception.
+@hojjat_function(
+    name="error_demo",
+    label="Error Demo",
+    description="Demonstrate error handling in the TUI.",
+)
+def error_demo(message: str = "Something went wrong") -> str:
+    """Demonstrate error handling.
+
+    What it demonstrates:
+        - A function that deliberately raises an exception.
+        - The TUI catches the error and shows a traceback.
+    What to expect:
+        - The TUI shows an execution failure with the error message.
+    """
+    raise RuntimeError(message)
+
+'''
+
+def init_project() -> bool:
+    """Initialize a HOJJAT TUI project structure in the current directory.
+
+    Creates:
+        manage.py          - Project entry point
+        functions/         - Package directory for function modules
+        functions/__init__.py - Package marker
+        functions/example.py  - Example function module
+
+    Does NOT create or initialize a database.
+
+    Returns:
+        True if the project was created (or already existed), False on error.
+    """
+    root = Path.cwd()
+
+    # Check if project structure already exists
+    manage_py = root / "manage.py"
+    functions_dir = root / "functions"
+    functions_init = functions_dir / "__init__.py"
+    example_py = functions_dir / "example.py"
+
+    if manage_py.exists() or functions_dir.exists():
+        print("[info] HOJJAT TUI project structure already exists in "
+              f"'{root}'. No files were overwritten.")
+        return True
+
+    try:
+        # Create functions/ directory
+        functions_dir.mkdir(parents=True, exist_ok=False)
+
+        # Write files
+        manage_py.write_text(MANAGE_PY_TEMPLATE, encoding="utf-8")
+        functions_init.write_text(FUNCTIONS_INIT_TEMPLATE, encoding="utf-8")
+        example_py.write_text(EXAMPLE_PY_TEMPLATE, encoding="utf-8")
+
+        print(f"[success] HOJJAT TUI project initialized in '{root}'")
+        print("")
+        print("  Created: manage.py")
+        print("  Created: functions/__init__.py")
+        print("  Created: functions/example.py")
+        print("")
+        print("  Next steps:")
+        print("    1. Review functions/example.py for examples.")
+        print("    2. Add your own function modules to functions/.")
+        print("    3. Import them in manage.py.")
+        print("    4. Run: hojjat-tui   (or: python manage.py)")
+        return True
+
+    except FileExistsError:
+        print("[info] HOJJAT TUI project structure already exists. "
+              "No files were overwritten.")
+        return True
+    except Exception as e:
+        print(f"[error] Failed to initialize project: {e}")
+        logger.exception("Project initialization failed")
+        return False
+
+
 def cmd_init(args: argparse.Namespace):
-    """Initialize the database. Safe to rerun without data loss."""
-    db_path = args.db_path if hasattr(args, "db_path") and args.db_path else None
-    db = Database(db_path) if db_path else Database()
-    db.init_db()
-    print(f"[success] Database initialized at: {db.db_path}")
+    """Initialize a HOJJAT TUI project structure."""
+    init_project()
 
 def cmd_createsuperuser(args: argparse.Namespace):
     """Create a superuser account."""
@@ -75,6 +338,20 @@ def cmd_createsuperuser(args: argparse.Namespace):
 
 def cmd_run(args: argparse.Namespace):
     """Run a registered function by name, or launch the TUI if no name given."""
+    # Execute the project's manage.py (if present) so that module imports
+    # and @hojjat_function() decorators populate the registry in the current process.
+    # Use run_name != "__main__" to avoid triggering manage.py's `if __name__ == "__main__": run()`
+    # block — we only want the module imports, not to start the TUI here.
+    manage_file = Path.cwd() / "manage.py"
+    if manage_file.is_file():
+        root_str = str(manage_file.parent)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+        try:
+            runpy.run_path(str(manage_file), run_name="hojjat_tui.management.cmd_run")
+        except Exception:
+            pass
+
     # Load user-configured function modules so decorators populate the registry.
     loaded, errors = load_function_modules()
     for err in errors:
@@ -213,8 +490,7 @@ def create_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
     # init command
-    init_parser = subparsers.add_parser("init", help="Initialize database")
-    init_parser.add_argument("--db-path", type=str, default=None, help="Database path")
+    init_parser = subparsers.add_parser("init", help="Initialize project structure")
     init_parser.set_defaults(func=cmd_init)
     
     # createsuperuser command

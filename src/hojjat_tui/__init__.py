@@ -3,6 +3,12 @@
 from hojjat_tui.function import hojjat_function, FunctionResult, register, get_registry
 from hojjat_tui.executor import execute_function
 
+__version__ = "2.0.0"
+
+# Import run after __version__ is defined to avoid circular import
+# (tui.py imports __version__ from this package).
+from hojjat_tui.tui import run
+
 # Chain Engine exports
 from hojjat_tui.chain import (
     Chain,
@@ -29,8 +35,6 @@ from hojjat_tui.chain import (
     delete_chain,
 )
 
-__version__ = "1.6.8"
-
 __all__ = [
     "__version__",
     "hojjat_function",
@@ -38,6 +42,7 @@ __all__ = [
     "register",
     "get_registry",
     "execute_function",
+    "run",
     # Chain Engine
     "Chain",
     "ChainStep",

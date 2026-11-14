@@ -1,6 +1,6 @@
 # HOJJAT TUI
 
-[![Version](https://img.shields.io/badge/version-1.6.8-blue)](https://github.com/placeholder/hojjat-tui)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue)](https://github.com/placeholder/hojjat-tui)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -51,32 +51,110 @@ python -m pip install -e ".[dev]"
 
 ## Quick Start
 
-### Launch the TUI
+### Step 1: Initialize a HOJJAT TUI project
+
+```bash
+hojjat-tui init
+```
+
+This creates the project structure in the current directory:
+
+```text
+MyProject/
+├── manage.py
+├── functions/
+│   ├── __init__.py
+│   └── example.py
+```
+
+- `manage.py` — the project entry point. Import your function modules here.
+- `functions/example.py` — six example functions demonstrating string, table, chart, input, JSON, and error output patterns.
+- No database is created during initialization.
+
+### Step 2: Launch the TUI
 
 ```bash
 hojjat-tui
 ```
 
-On first launch, you will see a welcome / login screen. If no user account
-exists yet, you will be guided through a first-run account creation flow.
-After successful authentication, the main TUI opens.
+This executes your project's `manage.py` (which imports your function modules, triggering their `@hojjat_function()` decorators), then starts the TUI. All registered functions appear in the function list.
 
-### Use management commands
+Alternatively:
 
 ```bash
-python manage.py init              # Initialize the SQLite database
-python manage.py createsuperuser   # Create a superuser account (CLI)
-python manage.py check             # Verify installation
-python manage.py test              # Run the test suite
-python manage.py --version         # Show version
-python manage.py run <function_name>  # Run a function from CLI (no login required)
+python manage.py
 ```
 
-### Run a function from CLI
+Both commands produce the same application behavior.
+
+### Step 3: Run a function from CLI
 
 ```bash
-python manage.py run hello --name "World"
-python manage.py run factorial --n 5
+hojjat-tui run <function_name> --param KEY=VALUE
+```
+
+Or via manage.py:
+
+```bash
+python manage.py run <function_name> --param KEY=VALUE
+```
+
+---
+
+## Project Initialization (`hojjat-tui init`)
+
+The `init` command creates a new HOJJAT TUI project in the current working directory. It is safe to run multiple times — existing files are never overwritten.
+
+### Generated files
+
+| File | Purpose |
+|------|---------|
+| `manage.py` | Project entry point. Imports function modules and calls `run()`. |
+| `functions/__init__.py` | Marks `functions/` as a Python package. |
+| `functions/example.py` | Six example functions demonstrating all output types. |
+
+### Adding your own functions
+
+1. Create a new module in `functions/` (e.g., `functions/my_functions.py`).
+2. Register functions with `@hojjat_function()`.
+3. Import the module in `manage.py`:
+
+```python
+from hojjat_tui import run
+from functions import example
+from functions import my_functions   # your new module
+
+if __name__ == "__main__":
+    run()
+```
+
+### Example: `functions/example.py`
+
+The generated `example.py` contains six functions:
+
+1. **`hello_world`** — Simple string output (no parameters)
+2. **`sample_data`** — Table output (list of dicts)
+3. **`monthly_sales`** — Chart output (numeric data rendered as ASCII bar chart)
+4. **`greet_user`** — Input parameter (typed `name: str` parameter)
+5. **`system_info`** — JSON output (dict returned as formatted JSON)
+6. **`error_demo`** — Error handling (raises `RuntimeError`)
+
+Each function has docstrings explaining what it demonstrates and what to expect in the TUI.
+
+---
+
+## Management Commands
+
+```bash
+hojjat-tui init              # Create project structure
+hojjat-tui                   # Start the TUI (executes manage.py)
+hojjat-tui run <name>        # Run a registered function from CLI
+hojjat-tui --version         # Show version
+python manage.py             # Start the TUI (same as hojjat-tui)
+python manage.py run <name>  # Run a function from CLI
+python manage.py check       # Verify installation
+python manage.py test        # Run the test suite
+python manage.py createsuperuser  # Create a superuser account
 ```
 
 ---
@@ -320,61 +398,6 @@ When `get_monthly_sales()` is executed, the TUI displays a text-based horizontal
 
 ---
 
-## Authentication
-
-HOJJAT TUI requires authentication before accessing the main TUI.
-
-### Startup Flow
-
-1. `hojjat-tui` (or `python manage.py run`) starts the application.
-2. The database is initialized.
-3. If no user account exists, the **First-Run Account Setup** screen is shown.
-4. Otherwise, the **Welcome / Login** screen is shown.
-5. After successful authentication, the main TUI opens.
-6. Failed login attempts show an error and remain on the login screen.
-
-### First-Run Account Setup
-
-On a fresh installation, you are prompted to create the first account:
-
-- **Username**: Choose a unique username.
-- **Password**: Choose a password (minimum 6 characters).
-- **Confirm Password**: Re-enter the password to confirm.
-
-The password is hashed with bcrypt before being stored. No plaintext
-passwords are ever written to disk.
-
-### Login
-
-Enter your username and password on the welcome screen and press **Login**
-(or Enter). On success, the main TUI opens. On failure, an error message is
-shown and you can retry.
-
-### Password Security
-
-- Passwords are hashed using **bcrypt** with 12 rounds.
-- Each password gets a unique salt automatically.
-- Passwords are never stored in plain text.
-- Login errors do not reveal whether a username exists.
-
-### Logout
-
-From the main TUI, press **L** or select **Logout** from the Settings menu
-to return to the login screen without closing the application.
-
-### Management Commands (No Login Required)
-
-The following commands do not require authentication:
-
-- `python manage.py init` — Initialize the database
-- `python manage.py createsuperuser` — Create a superuser via CLI
-- `python manage.py check` — Verify installation
-- `python manage.py test` — Run tests
-- `python manage.py --version` — Show version
-- `python manage.py run <function>` — Run a function from CLI
-
----
-
 ## Persistence Behavior
 
 - **Chains**: User-created chains are persisted in the SQLite database (`hojjat_tui.db` in the platform-appropriate data directory, or configurable via `HOJJAT_TUI_DATA_DIR` environment variable)
@@ -382,7 +405,7 @@ The following commands do not require authentication:
   - Windows: `%APPDATA%\hojjat_tui\hojjat_tui.db`
   - macOS/Linux: `$XDG_DATA_HOME/hojjat_tui/hojjat_tui.db` (default: `$HOME/.local/share/hojjat_tui/hojjat_tui.db`)
 - **On fresh startup**: The database is initialized empty with no saved chains
-- **Database reset**: Use `python manage.py reset-db` in the TUI settings, or `python manage.py init` to reinitialize
+- **Database reset**: Use "Reset Database (Clear All Data)" in the TUI settings menu
 - **User data**: Usernames and bcrypt-hashed passwords are also persisted in the same database
 
 ---
@@ -466,4 +489,4 @@ The test suite covers:
 
 MIT License — see [LICENSE](LICENSE) for details.
 
-**Current version: 1.6.8**
+**Current version: 2.0.0**

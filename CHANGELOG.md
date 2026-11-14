@@ -5,6 +5,31 @@ All notable changes to HOJJAT TUI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-11-14
+
+### Added
+
+- `init_project()` in `src/hojjat_tui/management.py` — creates project structure (`manage.py`, `functions/`, `functions/__init__.py`, `functions/example.py`)
+- `run()` exported from `hojjat_tui.__init__` — public application launcher API
+- `runpy.run_path()`-based project entry point execution — `manage.py` runs in the current process
+- Complete `functions/example.py` with six example functions (string, table, chart, input, JSON, error)
+- Project initialization workflow: `hojjat-tui init` then `hojjat-tui`
+
+### Changed
+
+- **BREAKING CHANGE**: `hojjat-tui init` now creates a project structure instead of initializing an empty database
+- **BREAKING CHANGE**: `hojjat-tui` (no args) now executes the project's `manage.py` via `runpy.run_path()` before starting the TUI
+- `management.py.cmd_init()` now calls `init_project()` instead of `Database.init_db()`
+- Removed `--db-path` option from `init` subcommand
+- Version: `1.6.8` → `2.0.0`
+
+### Preserved
+
+- Function Registry, `@hojjat_function()` decorator, Chain Engine, and all existing public APIs
+- `src/hojjat_tui/auth.py`, `src/hojjat_tui/screens/welcome.py`, and `src/hojjat_tui/screens/first_run.py` remain available for optional future authentication support
+- Database initialization remains available via `Database.init_db()` and `python manage.py check`
+- `refresh_functions()` continues to read the in-memory registry without re-executing `manage.py`
+
 ## [1.6.8] - 2026-11-14
 
 ### Added
