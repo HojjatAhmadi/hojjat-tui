@@ -28,7 +28,13 @@ except ImportError:
     Figlet = None
 
 from hojjat_tui import __version__
-from hojjat_tui.function import get_registry, load_function_modules, ChartOutput
+from hojjat_tui.function import (
+    get_registry,
+    load_function_modules,
+    reload_function_modules,
+    get_last_reload_result,
+    ChartOutput,
+)
 from hojjat_tui.executor import execute_function
 from hojjat_tui.chain import (
     Chain, ChainStep, ParameterBinding, BindingType, ChainStatus,
@@ -775,15 +781,25 @@ class HojjatTUIApplication(App):
 
     async def refresh_functions(self):
         try:
-            # Re-run module discovery so newly configured modules are picked up.
-            # Already-loaded modules are skipped (Python module caching prevents
-            # duplicate decorator execution).
-            loaded, errors = load_function_modules()
-            for err in errors:
-                logger.warning("Module load error: %s", err)
+            # Reload all function modules, detecting additions, modifications,
+            # and deletions.  This replaces the old load_function_modules()
+            # which only imported new modules and never reloaded changed ones.
+            result = reload_function_modules()
             self.registry = get_registry()
-        except:
-            pass
+
+            # Show a summary with added/updated/removed counts
+            summary = result.get("summary", "")
+            for err in result.get("errors", []):
+                logger.warning("Module reload error: %s", err)
+        except Exception:
+            logger.exception("Refresh failed unexpectedly")
+            self.registry = get_registry()
+            summary = "Refresh failed — see log for details."
+
+        # If the currently selected function was removed, reset selection
+        if self.selected is not None and self.selected not in self.registry:
+            self.selected = None
+
         menu = self.query_one("#function-list", OptionList)
         menu.clear_options()
 
@@ -799,7 +815,7 @@ class HojjatTUIApplication(App):
                     show += f" — {desc}"
                 menu.add_option(Option(show, name))
 
-        await self.status_update(f"Loaded {len(self.registry)} functions")
+        await self.status_update(summary)
 
     def _clear_form_state(self):
         """Reset form state after execution."""

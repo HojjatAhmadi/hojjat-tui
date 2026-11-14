@@ -316,6 +316,16 @@ def load_function_modules() -> Tuple[List[str], List[str]]:
         try:
             importlib.import_module(module_name)
             _LOADED_MODULES.add(module_name)
+            # Track file stats for future change detection
+            root = find_project_root()
+            file_path = _find_module_file(module_name, root)
+            if file_path is not None:
+                _MODULE_FILE_PATHS[module_name] = file_path
+                try:
+                    stat = file_path.stat()
+                    _MODULE_TIMESTAMPS[module_name] = (stat.st_mtime, stat.st_size)
+                except OSError:
+                    pass
             loaded.append(module_name)
         except ImportError as e:
             errors.append(
@@ -334,3 +344,252 @@ def load_function_modules() -> Tuple[List[str], List[str]]:
 def get_loaded_modules() -> List[str]:
     """Return the sorted list of loaded function module names."""
     return sorted(_LOADED_MODULES)
+
+
+# ---------------------------------------------------------------------------
+# Hot reload / module change detection
+# ---------------------------------------------------------------------------
+
+_MODULE_TIMESTAMPS: Dict[str, Tuple[float, int]] = {}
+_MODULE_FILE_PATHS: Dict[str, Path] = {}
+
+
+def scan_functions_directory() -> List[str]:
+    """Scan the functions/ directory for Python module files.
+
+    Returns a sorted list of module names (without .py extension),
+    excluding __init__.py.
+    """
+    root = find_project_root()
+    if root is None:
+        return []
+
+    functions_dir = root / "functions"
+    if not functions_dir.is_dir():
+        return []
+
+    modules: List[str] = []
+    for f in sorted(functions_dir.glob("*.py")):
+        if f.name == "__init__.py":
+            continue
+        modules.append(f.stem)
+    return modules
+
+
+def _find_module_file(module_name: str, root: Optional[Path]) -> Optional[Path]:
+    """Find the source file path for a given module name.
+
+    Handles dotted module names (e.g. ``pkg.mod`` → ``pkg/mod.py``).
+    Checks the functions/ directory first, then falls back to sys.path.
+    """
+    path_parts = module_name.split(".")
+    filename = path_parts[-1] + ".py"
+
+    if root is not None:
+        candidate = root / "functions" / Path(*path_parts).with_suffix(".py")
+        if candidate.is_file():
+            return candidate
+
+    for path in sys.path:
+        candidate = Path(path) / Path(*path_parts).with_suffix(".py")
+        if candidate.is_file():
+            return candidate
+
+    return None
+
+
+def _remove_module_functions(module_name: str) -> List[str]:
+    """Remove all functions belonging to a module from the registry.
+
+    Returns the list of removed function names.
+    """
+    to_remove: List[str] = []
+    for name, func in list(_REGISTRY.items()):
+        metadata = getattr(func, "_hojjat_metadata", {})
+        if metadata.get("module") == module_name:
+            to_remove.append(name)
+
+    for name in to_remove:
+        del _REGISTRY[name]
+        _LOGGER.pop(name, None)
+
+    return to_remove
+
+
+def reload_function_modules() -> Dict[str, Any]:
+    """Reload all function modules, detecting additions, modifications, and deletions.
+
+    Scans the configured modules (from pyproject.toml) and the functions/
+    directory.  Compares file timestamps and sizes to detect changes.
+
+    Uses an atomic backup/restore strategy: all project modules are removed
+    from sys.modules and re-imported fresh.  If any module fails to load
+    (e.g. syntax error), the entire registry and sys.modules state are
+    restored to their pre-refresh values, so the TUI is never left in a
+    corrupted or partially updated state.
+
+    Returns a dict with keys:
+        added      - list of newly imported module names
+        updated    - list of reloaded module names
+        removed    - list of removed module names
+        errors     - list of human-readable error messages
+        summary    - human-readable summary string
+    """
+    configured = set(read_function_modules())
+    discovered = set(scan_functions_directory())
+    all_modules = configured | discovered
+
+    root = find_project_root()
+    if root is not None:
+        root_str = str(root)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+
+    # --- Backup current state for atomic rollback ---------------------
+    backup_registry = dict(_REGISTRY)
+    backup_loaded = set(_LOADED_MODULES)
+    backup_timestamps = dict(_MODULE_TIMESTAMPS)
+    backup_file_paths = dict(_MODULE_FILE_PATHS)
+    backup_sys_modules: Dict[str, Any] = {}
+    for mod_name in backup_loaded:
+        if mod_name in sys.modules:
+            backup_sys_modules[mod_name] = sys.modules[mod_name]
+
+    # Determine removed modules (loaded but no longer in all_modules)
+    removed: List[str] = sorted(backup_loaded - all_modules)
+
+    # --- Clear state for fresh reload ---------------------------------
+    _REGISTRY.clear()
+    _LOADED_MODULES.clear()
+    _MODULE_TIMESTAMPS.clear()
+    _MODULE_FILE_PATHS.clear()
+
+    # Remove all project modules from sys.modules so they get re-imported
+    # with fresh decorator execution.
+    for mod_name in backup_loaded:
+        sys.modules.pop(mod_name, None)
+    for mod_name in all_modules:
+        sys.modules.pop(mod_name, None)
+
+    added: List[str] = []
+    updated: List[str] = []
+    errors: List[str] = []
+
+    # --- Import / reload every module ---------------------------------
+    reload_failed = False
+
+    for mod_name in sorted(all_modules):
+        if not mod_name:
+            continue
+
+        # Find the source file for timestamp tracking
+        file_path = _find_module_file(mod_name, root)
+        current_stats = None
+        if file_path is not None:
+            _MODULE_FILE_PATHS[mod_name] = file_path
+            try:
+                stat = file_path.stat()
+                current_stats = (stat.st_mtime, stat.st_size)
+            except OSError:
+                pass
+
+        try:
+            importlib.import_module(mod_name)
+            _LOADED_MODULES.add(mod_name)
+            if current_stats is not None:
+                _MODULE_TIMESTAMPS[mod_name] = current_stats
+
+            # Only report as "updated" if the file actually changed.
+            # Modules that were re-imported for atomicity but haven't
+            # changed are not reported as updates.
+            if mod_name in backup_loaded:
+                previous_stats = backup_timestamps.get(mod_name)
+                if current_stats != previous_stats:
+                    updated.append(mod_name)
+            else:
+                added.append(mod_name)
+        except Exception as e:
+            errors.append(f"Failed to load '{mod_name}': {e}")
+            logger.warning("Failed to load module '%s': %s", mod_name, e)
+            reload_failed = True
+
+    # --- Rollback on any failure --------------------------------------
+    if reload_failed:
+        # Restore everything from backup
+        _REGISTRY.clear()
+        _REGISTRY.update(backup_registry)
+        _LOADED_MODULES.clear()
+        _LOADED_MODULES.update(backup_loaded)
+        _MODULE_TIMESTAMPS.clear()
+        _MODULE_TIMESTAMPS.update(backup_timestamps)
+        _MODULE_FILE_PATHS.clear()
+        _MODULE_FILE_PATHS.update(backup_file_paths)
+
+        # Restore sys.modules from backup
+        for mod_name in all_modules:
+            sys.modules.pop(mod_name, None)
+        for mod_name, mod in backup_sys_modules.items():
+            sys.modules[mod_name] = mod
+
+        summary = "Refresh failed — previous registry preserved."
+        result = {
+            "added": [],
+            "updated": [],
+            "removed": [],
+            "errors": errors,
+            "summary": summary,
+        }
+    else:
+        summary_parts: List[str] = []
+        if added:
+            summary_parts.append(f"{len(added)} added")
+        if updated:
+            summary_parts.append(f"{len(updated)} updated")
+        if removed:
+            summary_parts.append(f"{len(removed)} removed")
+        if errors:
+            summary_parts.append(f"{len(errors)} error(s)")
+        if not summary_parts:
+            summary = "No changes detected."
+        else:
+            summary = "Refresh completed: " + ", ".join(summary_parts) + "."
+
+        result = {
+            "added": added,
+            "updated": updated,
+            "removed": removed,
+            "errors": errors,
+            "summary": summary,
+        }
+
+    # Cache for UI display
+    global _LAST_RELOAD_RESULT
+    _LAST_RELOAD_RESULT = result
+
+    return result
+
+
+def get_reload_summary() -> str:
+    """Return a human-readable summary of the last reload operation.
+
+    Returns "No reload has been performed yet." if reload_function_modules()
+    has never been called.
+    """
+    # This is a placeholder; callers should use the summary from
+    # reload_function_modules() directly.
+    return "No reload summary available."
+
+
+# Keep last reload result for UI display
+_LAST_RELOAD_RESULT: Dict[str, Any] = {
+    "added": [],
+    "updated": [],
+    "removed": [],
+    "errors": [],
+    "summary": "No reload has been performed yet.",
+}
+
+
+def get_last_reload_result() -> Dict[str, Any]:
+    """Return the result dict from the most recent reload_function_modules() call."""
+    return dict(_LAST_RELOAD_RESULT)

@@ -5,6 +5,22 @@ All notable changes to HOJJAT TUI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-11-14
+
+### Fixed
+
+- **Refresh / hot reload**: `refresh_functions()` now uses `reload_function_modules()` which detects added, modified, and deleted functions and modules. Previously it only imported new modules and never reloaded changed ones or removed stale registrations.
+- **Duplicate TUI startup**: `cli.py` no longer calls `run()` after executing `manage.py` via `runpy.run_path()`, preventing a second TUI instance from starting.
+- **Form error display**: `on_mount()` now focuses the function list so Enter-key selection works, ensuring `#form-message` is available when function errors are displayed.
+
+### Added
+
+- `reload_function_modules()` in `src/hojjat_tui/function.py` — atomic hot reload with backup/restore on failure
+- `scan_functions_directory()` — discovers modules in the `functions/` directory
+- File-change detection via mtime + size tracking (`_MODULE_TIMESTAMPS`)
+- `get_last_reload_result()` — returns the summary of the most recent reload
+- Refresh summary messages: "N added, N updated, N removed" or "No changes detected."
+
 ## [2.0.0] - 2026-11-14
 
 ### Added

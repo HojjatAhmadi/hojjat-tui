@@ -3,7 +3,7 @@
 from hojjat_tui.function import hojjat_function, FunctionResult, ChartOutput, register, get_registry
 from hojjat_tui.executor import execute_function
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 # Import run after __version__ is defined to avoid circular import
 # (tui.py imports __version__ from this package).
