@@ -357,7 +357,7 @@ _MODULE_FILE_PATHS: Dict[str, Path] = {}
 def scan_functions_directory() -> List[str]:
     """Scan the functions/ directory for Python module files.
 
-    Returns a sorted list of module names (without .py extension),
+    Returns a sorted list of dotted module names (e.g. ``functions.example``),
     excluding __init__.py.
     """
     root = find_project_root()
@@ -372,21 +372,27 @@ def scan_functions_directory() -> List[str]:
     for f in sorted(functions_dir.glob("*.py")):
         if f.name == "__init__.py":
             continue
-        modules.append(f.stem)
+        modules.append(f"functions.{f.stem}")
     return modules
 
 
 def _find_module_file(module_name: str, root: Optional[Path]) -> Optional[Path]:
     """Find the source file path for a given module name.
 
-    Handles dotted module names (e.g. ``pkg.mod`` → ``pkg/mod.py``).
+    Handles dotted module names (e.g. ``functions.example`` → ``functions/example.py``)
+    and bare names (e.g. ``main`` → ``main.py``).
     Checks the functions/ directory first, then falls back to sys.path.
     """
     path_parts = module_name.split(".")
-    filename = path_parts[-1] + ".py"
 
     if root is not None:
-        candidate = root / "functions" / Path(*path_parts).with_suffix(".py")
+        # If the module name starts with "functions.", look in the functions/ directory.
+        if path_parts[0] == "functions" and len(path_parts) == 2:
+            candidate = root / "functions" / f"{path_parts[1]}.py"
+            if candidate.is_file():
+                return candidate
+        # Otherwise, look for the module as a dotted path under root.
+        candidate = root / Path(*path_parts).with_suffix(".py")
         if candidate.is_file():
             return candidate
 

@@ -750,11 +750,15 @@ class HojjatTUIApplication(App):
 
     async def on_mount(self) -> None:
         await self.init_db()
-        await self.refresh_functions()
+        # Read the registry as populated by manage.py at startup.
+        # Do NOT call reload_function_modules() here — that would clear
+        # the registry that manage.py just filled with decorated functions.
+        # Reload is only triggered explicitly by the user (Refresh key/button).
+        self.registry = get_registry()
         # Focus the function list so Enter-key selection works out of the box.
         # Use set_timer to ensure focus is applied after the first render cycle.
         self.set_timer(0.05, self._focus_function_list)
-        await self.status_update("Ready — select a function to run")
+        await self.status_update(f"Loaded {len(self.registry)} functions")
 
     async def _focus_function_list(self) -> None:
         try:

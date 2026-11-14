@@ -460,3 +460,180 @@ def func_i(
         # The old registry should be preserved
         assert "func_i" in get_registry()
         assert execute_function("func_i").output == "i"
+
+
+class TestStartupIntegration:
+    """Integration tests for project startup and refresh recovery."""
+
+    def test_startup_populates_registry_from_manage_py(self, tmp_path, monkeypatch):
+        """Functions imported by manage.py appear in the registry at startup."""
+        _setup_test_path(tmp_path, monkeypatch)
+
+        # Create a minimal project structure
+        _write_pyproject(tmp_path, [])
+        _write_module(tmp_path, "my_functions",
+            '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="startup_func")
+def startup_func():
+    return "startup"
+''',
+        )
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import get_registry, load_function_modules
+
+        _clear_registry_and_loaded()
+
+        # Simulate what manage.py does: import the module, triggering decorators
+        import my_functions
+
+        # Functions from the module should be in the registry
+        registry = get_registry()
+        assert "startup_func" in registry, f"Expected startup_func in registry, got {list(registry.keys())}"
+
+        # load_function_modules should populate tracking state for configured modules
+        loaded, errors = load_function_modules()
+        assert "startup_func" in get_registry()
+
+    def test_explicit_module_registration(self, tmp_path, monkeypatch):
+        """Modules listed in pyproject.toml function_modules load at startup."""
+        _setup_test_path(tmp_path, monkeypatch)
+        _write_pyproject(tmp_path, ["explicit_mod"])
+        _write_module(
+            tmp_path, "explicit_mod",
+            '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="explicit_func")
+def explicit_func():
+    return "explicit"
+''',
+        )
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            load_function_modules, reload_function_modules,
+            get_registry,
+        )
+        _clear_registry_and_loaded()
+
+        loaded, errors = load_function_modules()
+        assert "explicit_mod" in loaded, f"Expected explicit_mod in loaded, got {loaded}"
+        assert errors == [], f"Expected no errors, got {errors}"
+        assert "explicit_func" in get_registry()
+
+    def test_automatic_discovery_of_functions_directory(self, tmp_path, monkeypatch):
+        """Modules in functions/ directory are discovered automatically."""
+        _setup_test_path(tmp_path, monkeypatch)
+        _write_pyproject(tmp_path, [])  # No configured modules
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            scan_functions_directory, reload_function_modules, get_registry,
+            _REGISTRY, _LOADED_MODULES, _MODULE_TIMESTAMPS, _MODULE_FILE_PATHS,
+        )
+        _clear_registry_and_loaded()
+
+        # Clean up any leftover 'functions' package from other tests
+        for mod_name in list(sys.modules.keys()):
+            if mod_name == "functions" or mod_name.startswith("functions."):
+                del sys.modules[mod_name]
+
+        # Create a module in functions/
+        functions_dir = tmp_path / "functions"
+        functions_dir.mkdir()
+        (functions_dir / "__init__.py").write_text("", encoding="utf-8")
+        (functions_dir / "discovered_mod.py").write_text(
+            '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="discovered_func")
+def discovered_func():
+    return "discovered"
+''',
+            encoding="utf-8",
+        )
+
+        # scan_functions_directory should find it
+        discovered = scan_functions_directory()
+        assert "functions.discovered_mod" in discovered, f"Expected functions.discovered_mod in {discovered}"
+
+        # reload_function_modules should load it
+        result = reload_function_modules()
+        assert "functions.discovered_mod" in result["added"], f"Expected added, got {result}"
+        assert "discovered_func" in get_registry()
+
+    def test_refresh_recovery_empty_registry(self, tmp_path, monkeypatch):
+        """Refresh restores functions when registry is empty but modules exist."""
+        _setup_test_path(tmp_path, monkeypatch)
+        _write_pyproject(tmp_path, ["recovery_mod"])
+        _write_module(
+            tmp_path, "recovery_mod",
+            '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="recovery_func")
+def recovery_func():
+    return "recovered"
+''',
+        )
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            load_function_modules, reload_function_modules,
+            get_registry, _REGISTRY,
+        )
+        _clear_registry_and_loaded()
+
+        # Load normally first
+        load_function_modules()
+        assert "recovery_func" in get_registry()
+
+        # Simulate an empty registry (e.g., corrupted state)
+        _REGISTRY.clear()
+        assert len(get_registry()) == 0
+
+        # Refresh should recover the functions
+        result = reload_function_modules()
+        # The module was re-imported (functions restored) but since timestamps
+        # didn't change, it's not reported as "added" or "updated".
+        assert "recovery_func" in get_registry(), f"Expected recovery_func restored, got {list(get_registry().keys())}"
+
+    def test_reload_multiple_times_no_duplicates(self, tmp_path, monkeypatch):
+        """Multiple refreshes don't create duplicate registrations."""
+        _setup_test_path(tmp_path, monkeypatch)
+        _write_pyproject(tmp_path, ["multi_mod"])
+        _write_module(
+            tmp_path, "multi_mod",
+            '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="multi_func")
+def multi_func():
+    return "multi"
+''',
+        )
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            load_function_modules, reload_function_modules, get_registry,
+        )
+        _clear_registry_and_loaded()
+
+        load_function_modules()
+        assert len(get_registry()) == 1
+
+        # Reload 5 times
+        for _ in range(5):
+            reload_function_modules()
+
+        assert len(get_registry()) == 1
+        assert "multi_func" in get_registry()
+

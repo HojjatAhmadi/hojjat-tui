@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from hojjat_tui import __version__, run
+from hojjat_tui.function import load_function_modules
 from hojjat_tui.management import main as management_main
 
 MANAGE_FILE = "manage.py"
@@ -79,6 +80,14 @@ def main(argv: Optional[List[str]] = None):
         # the TUI via its `if __name__ == "__main__": run()` block.
         # Do NOT call run() here — that would start a second TUI instance.
         _execute_manage_py(manage_file)
+
+        # Load configured function modules so the hot-reload system has
+        # tracking state for the project's modules.
+        try:
+            load_function_modules()
+        except Exception:
+            logger.exception("Failed to load function modules at startup")
+
         return
 
     if "--version" in argv or "-V" in argv:
