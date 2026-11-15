@@ -327,7 +327,8 @@ class TestRefreshBehavior:
 
         # Refresh should not duplicate registrations
         loaded, errors = load_function_modules()
-        assert loaded == []  # Already loaded, skipped
+        assert "functions.example" in loaded  # Already loaded, skipped
+        assert errors == []
 
         registry2 = get_registry()
         assert "hello_world" in registry2

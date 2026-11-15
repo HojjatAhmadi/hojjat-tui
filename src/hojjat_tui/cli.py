@@ -10,10 +10,10 @@ Supports:
 import runpy
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from hojjat_tui import __version__, run
-from hojjat_tui.function import load_function_modules
+from hojjat_tui.function import _LOADED_MODULES, _MODULE_FILE_PATHS, _MODULE_TIMESTAMPS, load_function_modules
 from hojjat_tui.management import main as management_main
 
 MANAGE_FILE = "manage.py"
@@ -31,6 +31,52 @@ def _find_manage_py() -> Optional[Path]:
     return None
 
 
+def _track_newly_imported_modules(before_modules: Set[str], project_root: Path) -> None:
+    """Track modules that were imported during manage.py execution.
+
+    After runpy.run_path() executes manage.py, any new modules in sys.modules
+    that are project modules (their source file is under the project root)
+    are added to the hot-reload tracking system so Refresh can detect changes.
+    """
+    root_str = str(project_root)
+    new_modules = set(sys.modules.keys()) - before_modules
+
+    for mod_name in sorted(new_modules):
+        if mod_name in _LOADED_MODULES:
+            continue
+        # Skip stdlib and third-party modules — only track project modules
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            continue
+        mod_file = getattr(mod, "__file__", None)
+        if mod_file is None:
+            continue
+        mod_path = Path(mod_file)
+        # Only track modules whose source file is under the project root
+        try:
+            mod_path.relative_to(project_root)
+        except ValueError:
+            continue
+        # Compute dotted module name relative to project root
+        try:
+            rel = mod_path.relative_to(project_root)
+            parts = list(rel.parts)
+            if parts[-1] == "__init__.py":
+                parts = parts[:-1]
+            if parts and parts[-1].endswith(".py"):
+                parts[-1] = parts[-1][:-3]
+            dotted = ".".join(parts)
+        except ValueError:
+            dotted = mod_name
+        _LOADED_MODULES.add(dotted)
+        try:
+            stat = mod_path.stat()
+            _MODULE_TIMESTAMPS[dotted] = (stat.st_mtime, stat.st_size)
+        except OSError:
+            pass
+        _MODULE_FILE_PATHS[dotted] = mod_path
+
+
 def _execute_manage_py(manage_file: Path) -> None:
     """Execute manage.py inside the current Python process.
 
@@ -44,7 +90,15 @@ def _execute_manage_py(manage_file: Path) -> None:
     if root_str not in sys.path:
         sys.path.insert(0, root_str)
 
+    # Snapshot sys.modules before executing manage.py so we can track
+    # newly imported project modules for hot reload.
+    before_modules = set(sys.modules.keys())
+
     runpy.run_path(str(manage_file), run_name="__main__")
+
+    # Track modules that were imported by manage.py so Refresh can
+    # detect changes to them later.
+    _track_newly_imported_modules(before_modules, project_root)
 
 
 def main(argv: Optional[List[str]] = None):

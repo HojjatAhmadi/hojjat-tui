@@ -42,7 +42,7 @@ def _clear_registry_and_loaded():
     _MODULE_FILE_PATHS.clear()
     # Remove from sys.modules to force re-import
     for mod_name in list(sys.modules.keys()):
-        if mod_name.startswith("mod_"):
+        if mod_name.startswith("mod_") or mod_name.startswith("functions"):
             del sys.modules[mod_name]
 
 
@@ -623,7 +623,7 @@ def multi_func():
         sys.path.insert(0, str(tmp_path))
 
         from hojjat_tui.function import (
-            load_function_modules, reload_function_modules, get_registry,
+            reload_function_modules, get_registry, load_function_modules,
         )
         _clear_registry_and_loaded()
 
@@ -777,3 +777,335 @@ class TestStartupPopulation:
 
         import asyncio
         asyncio.run(run_test())
+
+
+class TestConsumerProjectWithoutPyproject:
+    """Tests for hot reload in consumer projects without pyproject.toml.
+
+    These tests simulate a real consumer project structure:
+
+        consumer_project/
+        ├── manage.py
+        └── functions/
+            ├── __init__.py
+            └── example.py
+
+    No pyproject.toml is present. The project root must be discovered
+    via manage.py or functions/ directory, and all module tracking must
+    work without configuration.
+    """
+
+    def _create_consumer_project(self, tmp_path, example_code=None):
+        """Create a consumer project without pyproject.toml."""
+        functions_dir = tmp_path / "functions"
+        functions_dir.mkdir()
+        (functions_dir / "__init__.py").write_text("", encoding="utf-8")
+
+        if example_code is None:
+            example_code = '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="greet")
+def greet(name: str):
+    """Greet a user by name."""
+    return f"Hello {name}!"
+
+@hojjat_function(name="add")
+def add_numbers(a: int, b: int):
+    """Add two numbers."""
+    return a + b
+'''
+        (functions_dir / "example.py").write_text(example_code, encoding="utf-8")
+
+        # Create manage.py
+        (tmp_path / "manage.py").write_text(
+            'from hojjat_tui import run\n'
+            'from functions import example\n'
+            '\n'
+            'if __name__ == "__main__":\n'
+            '    run()\n',
+            encoding="utf-8",
+        )
+
+        return tmp_path
+
+    def test_startup_registers_functions_without_pyproject(self, tmp_path, monkeypatch):
+        """Functions registered via manage.py imports are in the registry
+        even without pyproject.toml."""
+        self._create_consumer_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import get_registry, _REGISTRY
+        _clear_registry_and_loaded()
+
+        # Simulate what manage.py does: import the module
+        import functions.example
+
+        registry = get_registry()
+        assert "greet" in registry
+        assert "add" in registry
+        assert registry["greet"]["module"] == "functions.example"
+
+    def test_reload_without_pyproject_detects_changes(self, tmp_path, monkeypatch):
+        """Refresh detects modified functions without pyproject.toml."""
+        self._create_consumer_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            load_function_modules, reload_function_modules,
+            get_registry, _REGISTRY,
+        )
+        from hojjat_tui.executor import execute_function
+        _clear_registry_and_loaded()
+
+        # Initial load via manage.py simulation
+        import functions.example
+        load_function_modules()
+        assert "greet" in get_registry()
+
+        # Modify the function signature
+        example_code = '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="greet")
+def greet(name: str, age: int):
+    """Greet a user with name and age."""
+    return f"Hello {name}, age {age}"
+'''
+        (tmp_path / "functions" / "example.py").write_text(example_code, encoding="utf-8")
+        import time
+        time.sleep(0.05)
+
+        # Debug: verify file was written
+        import os
+        example_file = tmp_path / "functions" / "example.py"
+        assert example_file.exists(), f"File {example_file} does not exist!"
+        file_content = example_file.read_text(encoding="utf-8")
+        assert "age" in file_content, f"File does not contain 'age': {file_content}"
+
+        # Refresh should detect the change
+        result = reload_function_modules()
+        print(f"DEBUG: reload result = {result}")
+        print(f"DEBUG: registry keys = {list(get_registry().keys())}")
+        assert "functions.example" in result["updated"], f"Expected updated, got {result}"
+
+        # Verify the new signature
+        registry = get_registry()
+        sig = registry["greet"]["signature"]
+        params = list(sig.parameters.keys())
+        assert "age" in params, f"Expected 'age' parameter, got {params}"
+
+    def test_new_function_discovered_without_pyproject(self, tmp_path, monkeypatch):
+        """Adding a new function to an existing module is detected without pyproject.toml."""
+        self._create_consumer_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            load_function_modules, reload_function_modules,
+            get_registry, _REGISTRY,
+        )
+        _clear_registry_and_loaded()
+
+        import functions.example
+        load_function_modules()
+        assert "greet" in get_registry()
+        assert "add" in get_registry()
+        assert "new_func" not in get_registry()
+
+        # Add a new function to the existing module
+        example_code = '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="greet")
+def greet(name: str):
+    """Greet a user by name."""
+    return f"Hello {name}!"
+
+@hojjat_function(name="add")
+def add_numbers(a: int, b: int):
+    """Add two numbers."""
+    return a + b
+
+@hojjat_function(name="new_func")
+def new_func():
+    """A newly added function."""
+    return "new"
+'''
+        (tmp_path / "functions" / "example.py").write_text(example_code, encoding="utf-8")
+        import time
+        time.sleep(0.05)
+
+        result = reload_function_modules()
+        assert "functions.example" in result["updated"], f"Expected updated, got {result}"
+        assert "new_func" in get_registry()
+
+    def test_deleted_function_removed_without_pyproject(self, tmp_path, monkeypatch):
+        """Deleting a function removes it from registry without pyproject.toml."""
+        self._create_consumer_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            load_function_modules, reload_function_modules,
+            get_registry,
+        )
+        _clear_registry_and_loaded()
+
+        import functions.example
+        load_function_modules()
+        assert "greet" in get_registry()
+        assert "add" in get_registry()
+
+        # Remove the 'add' function
+        example_code = '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="greet")
+def greet(name: str):
+    """Greet a user by name."""
+    return f"Hello {name}!"
+'''
+        (tmp_path / "functions" / "example.py").write_text(example_code, encoding="utf-8")
+        import time
+        time.sleep(0.05)
+
+        result = reload_function_modules()
+        assert "functions.example" in result["updated"], f"Expected updated, got {result}"
+        assert "greet" in get_registry()
+        assert "add" not in get_registry()
+
+    def test_new_module_discovered_without_pyproject(self, tmp_path, monkeypatch):
+        """Creating a new module in functions/ is discovered without pyproject.toml."""
+        self._create_consumer_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            reload_function_modules, get_registry, load_function_modules,
+        )
+        _clear_registry_and_loaded()
+
+        import functions.example
+        load_function_modules()
+        assert "greet" in get_registry()
+
+        # Create a new module
+        new_module_code = '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="new_mod_func")
+def new_mod_func():
+    """Function from a new module."""
+    return "new module"
+'''
+        (tmp_path / "functions" / "new_module.py").write_text(new_module_code, encoding="utf-8")
+        import time
+        time.sleep(0.05)
+
+        result = reload_function_modules()
+        assert "functions.new_module" in result["added"], f"Expected added, got {result}"
+        assert "new_mod_func" in get_registry()
+
+    def test_deleted_module_removed_without_pyproject(self, tmp_path, monkeypatch):
+        """Deleting a module file removes its functions without pyproject.toml."""
+        # Create project with two modules
+        self._create_consumer_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        # Add a second module
+        second_module_code = '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="second_mod_func")
+def second_mod_func():
+    """Function from second module."""
+    return "second"
+'''
+        (tmp_path / "functions" / "second_module.py").write_text(second_module_code, encoding="utf-8")
+
+        from hojjat_tui.function import (
+            load_function_modules, reload_function_modules,
+            get_registry,
+        )
+        _clear_registry_and_loaded()
+
+        import functions.example
+        import functions.second_module
+        load_function_modules()
+        assert "greet" in get_registry()
+        assert "second_mod_func" in get_registry()
+
+        # Delete the second module
+        (tmp_path / "functions" / "second_module.py").unlink()
+        import time
+        time.sleep(0.05)
+
+        result = reload_function_modules()
+        assert "functions.second_module" in result["removed"], f"Expected removed, got {result}"
+        assert "greet" in get_registry()
+        assert "second_mod_func" not in get_registry()
+
+    def test_syntax_error_rollback_without_pyproject(self, tmp_path, monkeypatch):
+        """Syntax error in a module triggers rollback without pyproject.toml."""
+        self._create_consumer_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            load_function_modules, reload_function_modules,
+            get_registry,
+        )
+        from hojjat_tui.executor import execute_function
+        _clear_registry_and_loaded()
+
+        import functions.example
+        load_function_modules()
+        assert "greet" in get_registry()
+        assert execute_function("greet", kwargs={"name": "World"}).output == "Hello World!"
+
+        # Introduce a syntax error
+        bad_code = '''
+from hojjat_tui.function import hojjat_function
+
+@hojjat_function(name="greet")
+def greet(name: str
+    return "broken"
+'''
+        (tmp_path / "functions" / "example.py").write_text(bad_code, encoding="utf-8")
+        import time
+        time.sleep(0.05)
+
+        result = reload_function_modules()
+        assert len(result["errors"]) > 0, f"Expected errors, got {result}"
+
+        # Previous registry should be preserved
+        assert "greet" in get_registry()
+        assert execute_function("greet", kwargs={"name": "World"}).output == "Hello World!"
+
+    def test_repeated_refresh_no_duplicates_without_pyproject(self, tmp_path, monkeypatch):
+        """Multiple refreshes don't create duplicates without pyproject.toml."""
+        self._create_consumer_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        sys.path.insert(0, str(tmp_path))
+
+        from hojjat_tui.function import (
+            load_function_modules, reload_function_modules,
+            get_registry,
+        )
+        _clear_registry_and_loaded()
+
+        import functions.example
+        load_function_modules()
+        assert len(get_registry()) == 2
+
+        # Refresh 5 times
+        for _ in range(5):
+            reload_function_modules()
+
+        assert len(get_registry()) == 2
+        assert "greet" in get_registry()
+        assert "add" in get_registry()

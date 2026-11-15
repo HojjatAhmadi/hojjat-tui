@@ -170,10 +170,22 @@ _LOADED_MODULES: set[str] = set()
 
 
 def find_project_root() -> Optional[Path]:
-    """Find the project root by walking up from CWD looking for pyproject.toml."""
+    """Find the project root by walking up from CWD looking for project markers.
+
+    A project root is identified by the presence of any of:
+    - pyproject.toml (configuration file)
+    - manage.py (HOJJAT TUI project entry point)
+    - functions/ directory (contains registered function modules)
+
+    Returns None if no project marker is found.
+    """
     current = Path.cwd()
     for parent in [current] + list(current.parents):
         if (parent / "pyproject.toml").is_file():
+            return parent
+        if (parent / "manage.py").is_file():
+            return parent
+        if (parent / "functions").is_dir():
             return parent
     return None
 
@@ -299,6 +311,18 @@ def load_function_modules() -> Tuple[List[str], List[str]]:
     ensures decorators only run once per module).
     """
     modules = read_function_modules()
+
+    # Also discover modules from _REGISTRY metadata. Functions registered
+    # by direct imports in manage.py (e.g. "from functions import example")
+    # have _hojjat_metadata["module"] set, but may not appear in
+    # pyproject.toml's function_modules. Including them ensures hot reload
+    # works for consumer projects without pyproject.toml.
+    for func in _REGISTRY.values():
+        metadata = getattr(func, "_hojjat_metadata", {})
+        mod = metadata.get("module")
+        if mod and mod not in modules:
+            modules.append(mod)
+
     loaded: List[str] = []
     errors: List[str] = []
 
@@ -444,7 +468,8 @@ def reload_function_modules() -> Dict[str, Any]:
     global _LAST_RELOAD_RESULT
     configured = set(read_function_modules())
     discovered = set(scan_functions_directory())
-    all_modules = configured | discovered
+    tracked = set(_LOADED_MODULES)
+    all_modules = configured | discovered | tracked
 
     root = find_project_root()
     if root is not None:
@@ -512,14 +537,24 @@ def reload_function_modules() -> Dict[str, Any]:
 
         # Find the source file for timestamp tracking
         file_path = _find_module_file(mod_name, root)
+
+        # If the module file no longer exists, treat it as removed.
+        # This handles consumer projects where manage.py imports modules
+        # directly (no pyproject.toml) and a module file is deleted.
+        if file_path is None:
+            removed.append(mod_name)
+            _LOADED_MODULES.discard(mod_name)
+            _MODULE_TIMESTAMPS.pop(mod_name, None)
+            _MODULE_FILE_PATHS.pop(mod_name, None)
+            continue
+
         current_stats = None
-        if file_path is not None:
-            _MODULE_FILE_PATHS[mod_name] = file_path
-            try:
-                stat = file_path.stat()
-                current_stats = (stat.st_mtime, stat.st_size)
-            except OSError:
-                pass
+        _MODULE_FILE_PATHS[mod_name] = file_path
+        try:
+            stat = file_path.stat()
+            current_stats = (stat.st_mtime, stat.st_size)
+        except OSError:
+            pass
 
         try:
             importlib.import_module(mod_name)
