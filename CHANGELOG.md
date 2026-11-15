@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - File-change detection via mtime + size tracking (`_MODULE_TIMESTAMPS`)
 - `get_last_reload_result()` — returns the summary of the most recent reload
 - Refresh summary messages: "N added, N updated, N removed" or "No changes detected."
+- Consumer project support without `pyproject.toml` — project root is discovered via `manage.py` or `functions/` directory; modules imported directly by `manage.py` are automatically tracked for hot reload
+
+### Changed
+
+- `reload_function_modules()` now includes `_LOADED_MODULES` in its reload set, ensuring modules imported by `manage.py` are reloaded on Refresh
+- `load_function_modules()` also discovers modules from `_REGISTRY` metadata (functions registered via direct imports in `manage.py`)
 
 ## [2.0.0] - 2026-11-14
 

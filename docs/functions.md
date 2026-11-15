@@ -42,6 +42,7 @@ def my_function(param1: str = "", param2: int = 0) -> dict:
 
 Functions can return any Python value. The executor automatically detects the output type:
 
+- `ChartOutput` → `chart` (bar or line chart rendered as ASCII art)
 - `str` → `text` (or `markdown` if it looks like markdown)
 - `dict` → `json`
 - `list` → `table`
@@ -91,29 +92,7 @@ def time_info() -> dict:
     }
 ```
 
-### Example: Factorial Calculation
-
-```python
-from hojjat_tui.function import hojjat_function
-
-@hojjat_function(
-    name="factorial",
-    label="Factorial Calculator",
-    description="Calculate the factorial of a given number",
-    annotations={"n": {"type": "int", "description": "Number to calculate factorial of"}},
-    required=["n"],
-)
-def factorial(n: int) -> int:
-    """Calculate factorial of n."""
-    if n < 0:
-        raise ValueError("Factorial is not defined for negative numbers")
-    result = 1
-    for i in range(2, n + 1):
-        result *= i
-    return result
-```
-
-## Getting the Registry
+### Getting the Registry
 
 ### `get_registry()`
 
@@ -145,65 +124,7 @@ Each entry in the registry dictionary contains:
 
 ## Built-in Functions
 
-HOJJAT TUI includes the following built-in functions, registered on startup:
-
-### `hello`
-
-- **Label**: Hello World
-- **Description**: A simple greeting function that takes a name parameter
-- **Parameters**:
-  - `name` (required, str, default "World") - Name to greet
-  - `times` (optional, int, default 1) - Number of greetings to display
-- **Output**: Text string with greeting messages
-- **Metadata**: `{"name": "hello", "label": "Hello World", "description": "A simple greeting function that takes a name parameter", "annotations": {"name": {"type": "str", "description": "Name to greet"}, "times": {"type": "int", "description": "Number of greetings to display"}}, "defaults": {"name": "World", "times": 1}, "required": ["name"], ...}`
-
-### `time_info`
-
-- **Label**: Time Info
-- **Description**: Display current time and date information
-- **Parameters**: None
-- **Output**: Dict with current time information
-- **Current time format**: `YYYY-MM-DD HH:MM:SS`
-
-### `factorial`
-
-- **Label**: Factorial Calculator
-- **Description**: Calculate the factorial of a given number
-- **Parameters**:
-  - `n` (required, int) - Number to calculate factorial of
-- **Output**: Integer result
-- **Special**: Raises `ValueError` for negative numbers
-
-### `random_quote`
-
-- **Label**: Random Quote Generator
-- **Description**: Generate a random inspirational quote
-- **Parameters**: None
-- **Output**: String quote from a predefined list
-
-### `ping_test`
-
-- **Label**: Ping Test
-- **Description**: Simulate a ping test and return timing results as a table
-- **Parameters**:
-  - `host` (required, str, default "localhost") - Host to ping
-  - `count` (optional, int, default 3) - Number of pings to send
-- **Output**: List of dicts with timing data (seq, host, bytes, time_ms, ttl)
-
-### `system_info`
-
-- **Label**: System Info
-- **Description**: Return basic system information as structured data
-- **Parameters**: None
-- **Output**: Dict with system information (platform, python_version, architecture, processor, hostname, cpu_count)
-
-### `error_demo`
-
-- **Label**: Error Demonstration
-- **Description**: A function that intentionally raises an error to demonstrate error handling
-- **Parameters**:
-  - `message` (required, str, default "This is an intentional error") - Error message to use
-- **Output**: Error result (always raises RuntimeError)
+HOJJAT TUI does not include any pre-registered built-in functions. The `register_builtins()` function in `builtin_functions.py` is intentionally a no-op. All functions must be explicitly registered by the user via the `@hojjat_function()` decorator and imported through `manage.py`.
 
 ## Adding Functions at Runtime
 
@@ -231,7 +152,7 @@ All registered functions return values through a `FunctionResult` dataclass:
 | `timestamp` | `float` | Execution timestamp |
 | `output` | `Any` | Return value (str, dict, list) |
 | `error` | `str?` | Error message if failed |
-| `type` | `str` | Detected output type (text, markdown, json, table, error, info) |
+| `type` | `str` | Detected output type (text, markdown, json, table, chart, error, info) |
 | `metadata` | `dict` | Additional execution metadata |
 
 ### `FunctionResult.to_text()`

@@ -16,11 +16,11 @@ python -m hojjat_tui  # Python module
 
 ### Management Commands
 ```bash
-python manage.py init              # Initialize database
-python manage.py createsuperuser  # Create admin user
-python manage.py check            # Verify installation
-python manage.py test             # Run tests
-python manage.py run hello --param name=World  # Run a function
+python manage.py init              # Initialize project structure
+python manage.py check             # Verify installation
+python manage.py test              # Run tests
+python manage.py run <function> --param KEY=VALUE  # Run a function
+python manage.py createsuperuser   # Create an administrative user
 ```
 
 ## Running Tests
@@ -35,7 +35,7 @@ python -m pytest tests/ -k test_name  # Run specific tests
 
 ```bash
 ruff check src/ tests/    # Lint
-ruff format src/ tests/   # Format (if configured)
+ruff format src/ tests/   # Format
 black --check src/ tests/ # Verify formatting
 ```
 
@@ -43,44 +43,31 @@ black --check src/ tests/ # Verify formatting
 
 ```
 hojjat-tui/
-├── src/hojjat_tui/
-│   ├── __init__.py          # Public API
-│   ├── __main__.py          # Module entry point
-│   ├── cli.py               # Console script entry point
-│   ├── function.py          # Decorator + FunctionResult
-│   ├── executor.py          # Execution engine
-│   ├── renderer.py          # Output rendering
-│   ├── persistence.py       # SQLite + bcrypt
-│   ├── auth.py              # Authentication service
-│   ├── management.py        # Management commands
-│   ├── tui.py               # Textual TUI app
-│   ├── builtin_functions.py # Built-in sample functions
-│   ├── screens/             # Authentication screens
-│   │   ├── __init__.py
-│   │   ├── welcome.py       # Welcome / Login screen
-│   │   └── first_run.py     # First-Run Account Setup screen
-│   └── py.typed             # PEP 561 marker
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py
-│   ├── test_function.py
-│   ├── test_executor.py
-│   ├── test_persistence.py
-│   ├── test_renderer.py
-│   ├── test_cli.py
-│   └── test_tui.py
-├── manage.py
-├── pyproject.toml
-├── AGENTS.md
-├── README.md
-├── CHANGELOG.md
-├── LICENSE
-└── .gitignore
+├── docs/                  # Professional developer documentation
+├── src/hojjat_tui/        # Main package
+│   ├── __init__.py        # Public API exports
+│   ├── __main__.py        # python -m hojjat_tui entry point
+│   ├── cli.py             # Console script + module CLI
+│   ├── function.py        # @hojjat_function decorator + FunctionResult + ChartOutput
+│   ├── executor.py        # Centralized function execution
+│   ├── persistence.py     # SQLite database + bcrypt password hashing
+│   ├── management.py      # Django-style management commands
+│   ├── tui.py             # Textual TUI application
+│   ├── chain.py           # Chain Engine — persistent function chaining
+│   ├── builtin_functions.py # Built-in function registration (no-op placeholder)
+│   └── py.typed           # PEP 561 type markers
+├── manage.py              # Django-style management script
+├── pyproject.toml         # Project configuration
+├── AGENTS.md              # Project rules for AI agents
+├── CHANGELOG.md           # Change log
+├── LICENSE                # MIT License
+├── README.md              # This file
+└── .gitignore             # Git exclusions
 ```
 
 ## Adding New Functions
 
-1. Create a new Python module in `src/hojjat_tui/`
+1. Create a new Python module in your project's `functions/` directory
 2. Use the `@hojjat_function` decorator:
 
 ```python
@@ -100,7 +87,16 @@ def my_tool(input: str = "") -> dict:
     return {"result": input.upper()}
 ```
 
-3. Import the module at startup (e.g., in `manage.py` or `__init__.py`)
+3. Import the module in your project's `manage.py` so the decorator executes:
+
+```python
+from hojjat_tui import run
+from functions import example
+from functions import my_functions   # your new module
+
+if __name__ == "__main__":
+    run()
+```
 
 ## Output Contract
 
@@ -111,6 +107,7 @@ Functions should return one of these types for proper rendering:
 | `str`             | Text or Markdown    |
 | `dict`            | JSON                |
 | `list[dict]`      | Table               |
+| `ChartOutput`     | Bar or Line chart   |
 | Any other type    | String representation |
 
 ## Error Handling
@@ -124,32 +121,22 @@ The executor wraps all calls in try/except and converts exceptions to `FunctionR
 ## Database
 
 - SQLite database stored in platform-specific app data directory
-- Tables: `users`, `function_logs`, `config`, `schema_meta`
+- Tables: `function_logs`, `config`, `chains`, `chain_steps`, `chain_param_bindings`, `chain_executions`, `step_executions`
 - `init_db()` is idempotent — safe to rerun
-- Password hashing uses bcrypt with 12 rounds
+- Password hashing uses bcrypt with 12 rounds (for user accounts)
 
-## Authentication
+## Hot Reload
 
-HOJJAT TUI requires authentication before the main TUI is shown:
+Press **R** or **Ctrl+R** (or click **Refresh**) in the TUI to reload function modules without restarting the application. This:
 
-1. `python manage.py run` starts the TUI application.
-2. On mount, the app checks whether any user accounts exist.
-3. If no users exist, the `FirstRunScreen` is shown for initial account creation.
-4. If users exist, the `WelcomeScreen` (login) is shown.
-5. Successful authentication reveals the main TUI.
-6. Failed authentication shows an error and remains on the login screen.
+- Detects newly added functions in existing modules
+- Detects modified function implementations (including changed signatures)
+- Detects newly created modules in `functions/`
+- Detects deleted functions and modules
+- Removes stale registrations
 
-### Logout
+Consumer projects do not require a `pyproject.toml`. Modules imported by `manage.py` are automatically tracked.
 
-Press `L` or select **Logout** from the Settings menu to return to the login
-screen without closing the application.
+## Chains
 
-### Management Commands (No Login Required)
-
-These commands do not require authentication:
-- `python manage.py init` — Initialize database
-- `python manage.py createsuperuser` — Create a superuser
-- `python manage.py check` — Verify installation
-- `python manage.py test` — Run tests
-- `python manage.py --version` — Show version
-- `python manage.py run <function>` — Run a function from CLI
+The Chain Engine allows linking multiple functions together. See [chains.md](chains.md) for details on `create_chain()`, `add_step()`, `literal()`, `user_input()`, `output_of()`, `validate_chain()`, `execute_chain()`, `save_chain()`, `load_chain()`, `list_chains()`, and `delete_chain()`.

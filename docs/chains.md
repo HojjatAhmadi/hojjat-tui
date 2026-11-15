@@ -308,15 +308,38 @@ print(f"Chain deleted: {result}")  # True if deleted, False if not found
 ### Complete Chain Workflow
 
 ```python
-from hojjat_tui import builtin_functions
 from hojjat_tui.chain import (
     create_chain, add_step, literal, output_of,
     save_chain, execute_chain, validate_chain
 )
-from hojjat_tui.function import get_registry
+from hojjat_tui.function import get_registry, hojjat_function
 
-# Ensure built-in functions are registered
-builtin_functions.register_builtins()
+# Register your own functions first
+@hojkat_function(
+    name="hello",
+    label="Hello",
+    description="A simple greeting function",
+    annotations={"name": {"type": "str", "description": "Name to greet"}},
+    defaults={"name": "World"},
+    required=["name"],
+)
+def hello(name: str = "World") -> str:
+    return f"Hello, {name}!"
+
+@hojkat_function(
+    name="time_info",
+    label="Time Info",
+    description="Display current time and date information",
+)
+def time_info() -> dict:
+    from datetime import datetime
+    now = datetime.now()
+    return {
+        "current_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "timestamp": now.timestamp(),
+        "weekday": now.strftime("%A"),
+        "iso_format": now.isoformat(),
+    }
 
 # Create a chain that greets a user, then shows the time
 chain = create_chain(
@@ -386,7 +409,7 @@ Each chain execution is logged in the `chain_executions` and `step_executions` t
 - **List**: Use `list_chains()` or TUI chains menu
 - **Load**: Use `load_chain()` or TUI chains menu
 - **Delete**: Use `delete_chain()` or TUI chain reset options
-- **Reset Database**: Use `python manage.py reset-db` or TUI settings
+- **Reset Database**: Use `python manage.py init` to reinitialize the schema
 
 ## Practical Chain Examples
 

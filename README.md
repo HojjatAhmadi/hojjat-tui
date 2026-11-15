@@ -1,23 +1,25 @@
 # HOJJAT TUI
 
-[![Version](https://img.shields.io/badge/version-2.0.1-blue)](https://github.com/placeholder/hojjat-tui)
+[![Version](https://img.shields.io/badge/version-2.0.1-blue)](https://github.com/HojjatAhmadi/hojjat-tui)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-HOJJAT TUI is a terminal-based user interface (TUI) tool built with Python and [Textual](https://textual.textualize.io/). It provides a registry of user-contributed functions that can run inside the terminal, render structured results (text, Markdown, tables, charts, JSON), and chain together in future phases.
+HOJJAT TUI is a terminal-based user interface (TUI) tool built with Python and [Textual](https://textual.textualize.io/). It provides a registry of user-contributed functions that can run inside the terminal, render structured results (text, Markdown, tables, charts, JSON), and chain together for sequential workflows.
 
-> **Note**: This is Phase 1 — a stable package foundation with a working end-to-end user journey through the TUI.
+Register your Python functions with the `@hojjat_function()` decorator, then launch `hojjat-tui` to browse, configure, and execute them from a clean terminal interface.
 
 ---
 
 ## Features
 
-- **Function Registry**: Register Python functions with metadata via the `@hojjat_function` decorator
+- **Function Registry**: Register Python functions with metadata via the `@hojjat_function()` decorator
 - **TUI Interface**: Navigate registered functions and enter parameters in an interactive Textual UI
 - **Structured Output**: Render results as text, Markdown, tables, charts, JSON, and error/info panels
-- **Persistence**: SQLite database for user metadata and execution logs
-- **Password Security**: bcrypt-hashed administrative passwords
+- **Chain Engine**: Link multiple functions together into sequential workflows with parameter bindings (literal, user input, previous step output)
+- **Persistence**: SQLite database for user metadata, chain definitions, and execution logs
+- **Password Security**: bcrypt-hashed administrative passwords for user accounts
 - **Management Commands**: Django-style `manage.py` interface for init, user management, running, checking, and testing
+- **Hot Reload**: Refresh function modules without restarting the TUI
 
 ---
 
@@ -25,27 +27,42 @@ HOJJAT TUI is a terminal-based user interface (TUI) tool built with Python and [
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.9 or later
+- pip (Python package manager)
 
-### Install from PyPI
+### Install from GitHub
 
 ```bash
-pip install hojjat-tui
+pip install git+https://github.com/HojjatAhmadi/hojjat-tui.git
 ```
 
 ### Install from Source
 
 ```bash
-git clone https://github.com/placeholder/hojjat-tui.git
+git clone https://github.com/HojjatAhmadi/hojjat-tui.git
 cd hojjat-tui
 pip install .
 ```
 
 ### Development Installation
 
+For development, install the package in "editable" mode so that changes to the source code are immediately reflected:
+
 ```bash
 python -m pip install -e ".[dev]"
 ```
+
+This installs the development dependencies (pytest, ruff, black, etc.) and sets up the package for development.
+
+### Verifying the Installation
+
+After installation, verify that the package is correctly installed:
+
+```bash
+hojjat-tui --version
+```
+
+This should display `hojjat-tui version 2.0.1`.
 
 ---
 
@@ -67,8 +84,9 @@ MyProject/
 │   └── example.py
 ```
 
-- `manage.py` — the project entry point. Import your function modules here.
-- `functions/example.py` — six example functions demonstrating string, table, chart, input, JSON, and error output patterns.
+- `manage.py` — the project entry point. Import your function modules here so their `@hojjat_function()` decorators register them before the TUI starts.
+- `functions/__init__.py` — marks `functions/` as a Python package.
+- `functions/example.py` — seven example functions demonstrating string, table, bar chart, line chart, input, JSON, and error output patterns.
 - No database is created during initialization.
 
 ### Step 2: Launch the TUI
@@ -111,7 +129,7 @@ The `init` command creates a new HOJJAT TUI project in the current working direc
 |------|---------|
 | `manage.py` | Project entry point. Imports function modules and calls `run()`. |
 | `functions/__init__.py` | Marks `functions/` as a Python package. |
-| `functions/example.py` | Six example functions demonstrating all output types. |
+| `functions/example.py` | Seven example functions demonstrating string, table, bar chart, line chart, input, JSON, and error output patterns. |
 
 ### Adding your own functions
 
@@ -130,33 +148,17 @@ if __name__ == "__main__":
 
 ### Example: `functions/example.py`
 
-The generated `example.py` contains six functions:
+The generated `example.py` contains seven functions:
 
 1. **`hello_world`** — Simple string output (no parameters)
 2. **`sample_data`** — Table output (list of dicts)
-3. **`sales_by_region`** — Bar chart output (ChartOutput with `chart_type="bar"`)
-4. **`temperature_trend`** — Line chart output (ChartOutput with `chart_type="line"`)
+3. **`sales_by_region`** — Bar chart output (`ChartOutput` with `chart_type="bar"`)
+4. **`temperature_trend`** — Line chart output (`ChartOutput` with `chart_type="line"`)
 5. **`greet_user`** — Input parameter (typed `name: str` parameter)
 6. **`system_info`** — JSON output (dict returned as formatted JSON)
 7. **`error_demo`** — Error handling (raises `RuntimeError`)
 
 Each function has docstrings explaining what it demonstrates and what to expect in the TUI.
-
----
-
-## Management Commands
-
-```bash
-hojjat-tui init              # Create project structure
-hojjat-tui                   # Start the TUI (executes manage.py)
-hojjat-tui run <name>        # Run a registered function from CLI
-hojjat-tui --version         # Show version
-python manage.py             # Start the TUI (same as hojjat-tui)
-python manage.py run <name>  # Run a function from CLI
-python manage.py check       # Verify installation
-python manage.py test        # Run the test suite
-python manage.py createsuperuser  # Create a superuser account
-```
 
 ---
 
@@ -181,13 +183,34 @@ def my_function(input_text: str = "") -> dict:
     return {"processed": input_text.upper()}
 ```
 
+### Decorator Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `str` | No | Unique name for the function. If None, uses the function name. |
+| `label` | `str` | No | Display label. If None, uses the `name`. |
+| `description` | `str` | No | Human-readable description. Shown in TUI and documentation. |
+| `annotations` | `dict` | No | Parameter type hints and descriptions for form generation. |
+| `defaults` | `dict` | No | Default values for optional parameters. |
+| `required` | `list[str]` | No | List of required parameter names. Parameters without defaults must be in this list. |
+
+### Return Type
+
+Functions can return any Python value. The executor automatically detects the output type:
+
+- `ChartOutput` → `chart` (bar or line chart rendered as ASCII art)
+- `str` → `text` (or `markdown` if it looks like markdown)
+- `dict` → `json`
+- `list` → `table`
+- Other → `text`
+
 ### Running a Function
 
 **In the TUI:**
 
 1. Select a function from the menu (navigate with arrow keys)
-2. Enter parameters in the input box (e.g., `name=World`)
-3. Press **Run** or **Ctrl+R**
+2. Enter parameters in the input form
+3. Press **Run** or `Ctrl+R`
 
 **From CLI:**
 
@@ -195,92 +218,19 @@ def my_function(input_text: str = "") -> dict:
 python manage.py run my_function --param name World
 ```
 
----
+or:
 
-
-
-### `hello`
-
-- **Purpose**: Generate a greeting message.
-- **Parameters**: 
-  - `name` (required, str): Name to greet, default "World"
-  - `times` (optional, int): Number of greetings to display, default 1
-- **Output**: Text string with greeting messages
-- **Example**: `hello(name="Alice", times=3)` returns `"Hello, Alice!\nHello, Alice!\nHello, Alice!"`
-
-### `time_info`
-
-- **Purpose**: Display current time and date information.
-- **Parameters**: None (no parameters)
-- **Output**: Dict with current time information
-- **Example**: Returns `{"current_time": "2024-01-15 14:30:00", "timestamp": 1705312200.0, "weekday": "Monday", "iso_format": "2024-01-15T14:30:00", "day_of_year": 15, "week_of_year": 3}`.
-
-### `factorial`
-
-- **Purpose**: Calculate the factorial of a given number.
-- **Parameters**: 
-  - `n` (required, int): Number to calculate factorial of
-- **Output**: Integer result
-- **Example**: `factorial(n=5)` returns `120`
-
-### `random_quote`
-
-- **Purpose**: Generate a random inspirational quote.
-- **Parameters**: None (no parameters)
-- **Output**: String quote
-- **Example**: Returns one of several quoted statements from notable figures.
-
-### `ping_test`
-
-- **Purpose**: Simulate a ping test and return timing results as a table.
-- **Parameters**: 
-  - `host` (required, str): Host to ping, default "localhost"
-  - `count` (optional, int): Number of pings to send, default 3
-- **Output**: List of dicts with timing data (seq, host, bytes, time_ms, ttl)
-- **Example**: Returns `[{"seq": 1, "host": "localhost", "bytes": 64, "time_ms": 1.23, "ttl": 64}, ...]`
-
-### `system_info`
-
-- **Purpose**: Return basic system information as structured data.
-- **Parameters**: None (no parameters)
-- **Output**: Dict with system information
-- **Example**: Returns `{"platform": "Windows-10-10.0-19041", "python_version": "3.9.0", ...}`
-
-### `error_demo`
-
-- **Purpose**: Demonstrate error handling in the TUI.
-- **Parameters**: 
-  - `message` (required, str): Error message to use, default "This is an intentional error"
-- **Output**: Error result (raises RuntimeError)
-- **Example**: Always raises `RuntimeError` with the provided message.
+```bash
+hojjat-tui run my_function --param name World
+```
 
 ---
 
-## Chain Creation and Execution
+## Chain Engine
+
+Chains allow you to link multiple functions together in a specified execution order. Each step in a chain can execute a registered function, with parameters sourced from literal values, user input, or output from previous steps. Chains are persisted in the SQLite database.
 
 ### Creating a Chain
-
-Chains allow you to link multiple functions together in a specified order. Each step in a chain can:
-
-- Execute a registered function
-- Pass output from previous steps as input to subsequent steps
-- Use literal values for parameters
-- Request user input for parameters
-
-### Building a Chain in the TUI
-
-1. Navigate to the **Chains** menu
-2. Select **New Chain** to open the chain builder
-3. Enter a chain name, display label, and optional description
-4. Select functions from the registry to add as steps
-5. For each step, configure parameter bindings:
-   - **Literal**: Use a fixed value
-   - **User Input**: Prompt the user for a value
-   - **Previous Step**: Use output from an earlier step
-6. Save the chain with a unique name
-7. Execute the chain from the chains menu
-
-### Building a Chain via CLI or Python
 
 ```python
 from hojjat_tui.chain import create_chain, add_step, literal
@@ -297,77 +247,44 @@ add_step(chain, "time_info")  # No extra params needed
 save_chain(chain)
 ```
 
+### Parameter Binding Types
+
+| Type | Description |
+|------|-------------|
+| **LITERAL** | Use a fixed value directly. Example: `literal("name", "Alice")` |
+| **USER_INPUT** | Prompt the user for a value at runtime. Example: `user_input("name", "Enter your name")` |
+| **PREVIOUS_STEP** | Use the output from a previous step in the chain. Example: `output_of("result", "step-uuid")` |
+
 ### Executing a Chain
 
 **In the TUI:**
 
 1. Navigate to the **Chains** menu
-2. Select a saved chain
-3. Press **Execute Chain**
-4. View results step by step, with table/chart rendering where applicable
+2. Select **New Chain** to open the chain builder
+3. Enter a chain name, display label, and optional description
+4. Select functions from the registry to add as steps
+5. For each step, configure parameter bindings:
+   - **Literal**: Use a fixed value
+   - **User Input**: Prompt the user for a value
+   - **Previous Step**: Use output from an earlier step
+6. Save the chain with a unique name
+7. Execute the chain from the chains menu
 
-**From CLI:**
-
-```bash
-python manage.py run-chain greet
-```
-
-### Parameter Binding Types
-
-- **LITERAL**: Use a fixed value directly. Example: `literal("name", "Alice")`
-- **USER_INPUT**: Prompt the user for a value at runtime. Example: `user_input("name", "Enter your name")`
-- **PREVIOUS_STEP**: Use the output from a previous step in the chain. Example: `output_of("result", "step-uuid")`
-
-### Result Presentation
-
-Function results are rendered based on their detected output type:
-
-| Type | Description |
-|------|-------------|
-| **text** | Plain text output |
-| **markdown** | Markdown content (rendered with Rich) |
-| **table** | List of dicts or list of lists rendered as a table |
-| **chart** | ChartOutput (bar or line chart rendered as ASCII art) |
-| **json** | Dict or JSON-compatible objects |
-| **error** | Error messages in a red panel |
-| **info** | Informational messages in a blue panel |
-
----
-
-## Table Example
-
-Functions can return tabular data that the TUI displays as a table. Supported formats:
-
-- **List of dicts**: Each dict represents a row, keys become column headers
-- **List of lists/tuples**: Each inner list/tuple represents a row
-
-### Practical Example
+**From Python:**
 
 ```python
-@hojjat_function(
-    name="get_users",
-    label="Get Users",
-    description="Return a list of user records",
-    annotations={},
-    defaults={},
-    required=[],
-)
-def get_users() -> list:
-    return [
-        ["Name", "Age"],
-        ["Alice", 28],
-        ["Bob", 34],
-        ["Charlie", 22],
-    ]
+from hojjat_tui.chain import create_chain, add_step, literal, execute_chain
+
+chain = create_chain("greet", "Greeting Chain", "A chain that greets a user")
+add_step(chain, "hello", params=[literal("name", "Alice")])
+
+execution = execute_chain(chain)
+print(f"Chain status: {execution.status}")
 ```
-
-When `get_users()` is executed, the TUI automatically renders the output as a table with columns "Name" and "Age", displaying all four user records.
-
-**Table access in TUI**: After executing a function with table output, press the **Table** button in the result screen to view the structured table view.
 
 ---
 
-## Chart Example
+## Chart Output
 
 Functions can return chart data that the TUI displays as a text-based bar or line chart. To explicitly declare chart output, return a `ChartOutput` instance from your function:
 
@@ -426,8 +343,6 @@ def temperature_trend() -> ChartOutput:
     )
 ```
 
-**Chart access in TUI**: When a function returns `ChartOutput`, the TUI automatically renders the chart — no need to press a manual **Chart** button. The chart is shown directly in the result screen.
-
 **Chart API**: `ChartOutput(chart_type="bar"|"line", labels=[...], values=[...], title="...")`
 
 - `chart_type`: Either `"bar"` or `"line"`
@@ -439,10 +354,26 @@ Charts require at least one label/value pair, and labels and values must have th
 
 ---
 
+## Hot Reload
+
+HOJJAT TUI supports hot reloading function modules without restarting the TUI. Press **R** or **Ctrl+R**, or click **Refresh** in the TUI, to:
+
+- Detect newly added functions in existing modules
+- Detect modified function implementations (including changed signatures and parameter metadata)
+- Detect newly created modules in the `functions/` directory
+- Detect deleted functions and modules
+- Remove stale registrations for functions that no longer exist
+
+The refresh summary shows how many modules were added, updated, or removed. If a module fails to load (e.g., syntax error), the error is reported and the previous working registry is preserved.
+
+Consumer projects do not require a `pyproject.toml`. Modules imported by `manage.py` are automatically tracked, and modules in the `functions/` directory are automatically discovered.
+
+---
+
 ## Persistence Behavior
 
 - **Chains**: User-created chains are persisted in the SQLite database (`hojjat_tui.db` in the platform-appropriate data directory, or configurable via `HOJJAT_TUI_DATA_DIR` environment variable)
-- **Database location**: 
+- **Database location**:
   - Windows: `%APPDATA%\hojjat_tui\hojjat_tui.db`
   - macOS/Linux: `$XDG_DATA_HOME/hojjat_tui/hojjat_tui.db` (default: `$HOME/.local/share/hojjat_tui/hojjat_tui.db`)
 - **On fresh startup**: The database is initialized empty with no saved chains
@@ -465,16 +396,6 @@ Or directly with pytest:
 python -m pytest
 ```
 
-### Test Coverage
-
-The test suite covers:
-
-- **Persistence layer**: Database initialization, user management, password hashing, chain save/load/list/delete
-- **Chain models**: Chain creation, step definitions, parameter bindings, validation
-- **Chain execution**: Single-step and multi-step execution, output references, failed step handling
-- **Function registration**: Decorator API, registry management
-- **Password hashing**: bcrypt hash generation and verification
-
 ---
 
 ## Project Structure
@@ -482,26 +403,16 @@ The test suite covers:
 ```
 .
 ├── docs/                  # Professional developer documentation
-│   ├── index.md           # Landing page
-│   ├── installation.md    # Installation guide
-│   ├── architecture.md    # System architecture
-│   ├── functions.md       # Function registration API
-│   ├── chains.md          # Chain creation and execution
-│   ├── results.md         # Result presentation and rendering
-│   ├── database.md        # Database schema and persistence
-│   └── development.md     # Development setup and contribution
 ├── src/hojjat_tui/        # Main package
 │   ├── __init__.py        # Public API exports
 │   ├── __main__.py        # python -m hojjat_tui entry point
 │   ├── cli.py             # Console script + module CLI
-│   ├── function.py        # @hojjat_function decorator + FunctionResult
+│   ├── function.py        # @hojjat_function decorator + FunctionResult + ChartOutput
 │   ├── executor.py        # Centralized function execution
-│   ├── renderer.py        # Output rendering (text, markdown, table, json)
 │   ├── persistence.py     # SQLite database + bcrypt password hashing
 │   ├── management.py      # Django-style management commands
 │   ├── tui.py             # Textual TUI application
-│   ├── builtin_functions.py # Built-in sample functions
-│   └── py.typed           # PEP 561 type markers
+│   └── chain.py           # Chain Engine — persistent function chaining
 ├── manage.py              # Django-style management script
 ├── pyproject.toml         # Project configuration
 ├── AGENTS.md              # Project rules for AI agents
@@ -531,3 +442,11 @@ The test suite covers:
 MIT License — see [LICENSE](LICENSE) for details.
 
 **Current version: 2.0.1**
+
+---
+
+## Links
+
+- [GitHub Repository](https://github.com/HojjatAhmadi/hojjat-tui)
+- [Bug Tracker](https://github.com/HojjatAhmadi/hojjat-tui/issues)
+- [Source Code](https://github.com/HojjatAhmadi/hojjat-tui)

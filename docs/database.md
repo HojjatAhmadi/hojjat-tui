@@ -2,9 +2,9 @@
 
 ## Overview
 
-HOJJAT TUI uses [SQLite](https://www.sqlite.org/) as the persistence layer for user metadata, chain definitions, and execution history. The database is created and managed automatically via the `Database` class in `src/hojjat_tui/persistence.py`.
+HOJJAT TUI uses [SQLite](https://www.sqlite.org/) as the persistence layer for chain definitions and execution history. The database is created and managed automatically via the `Database` class in `src/hojjat_tui/persistence.py`.
 
-### Database File Location
+## Database File Location
 
 The database file is platform-appropriate:
 
@@ -25,24 +25,10 @@ The database path can be customized via:
    hojjat-tui
    ```
 
-2. **Management command**: Use `--db-path` with `python manage.py`:
-
-   ```bash
-   python manage.py init --db-path /custom/path/hojjat_tui.db
-   ```
-
-3. **Code**: Pass a `db_path` to the `Database` constructor:
-
-   ```python
-   from hojjat_tui.persistence import Database
-   db = Database(db_path=Path("/custom/path/hojjat_tui.db"))
-   ```
-
 ### Database Initialization
 
-On first run (or when `python manage.py init` is called), the database is initialized with the following tables:
+On first run, the SQLite database is initialized with the following tables:
 
-- `users`: User accounts with bcrypt-hashed passwords
 - `function_logs`: Function execution history
 - `config`: Configuration settings key-value store
 - `chains`: User-created chain definitions
@@ -64,25 +50,9 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 
 The version is checked on initialization. If the current version is less than the expected version (`_DB_VERSION = 2`), tables are created or updated. This allows for future schema migrations without data loss.
 
-**Note**: The schema version is currently 2, incremented for the Chain Engine. Future phases will increment this version as new features are added.
+**Note**: The schema version is currently 2, incremented for the Chain Engine. Future versions will increment this version as new features are added.
 
 ### Tables
-
-#### `users`
-
-Stores user account information with bcrypt-hashed passwords.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER | Primary key, auto-increment |
-| `username` | TEXT | Unique username, not null |
-| `password_hash` | TEXT | bcrypt hash, not null |
-| `salt` | TEXT | bcrypt salt, not null |
-| `email` | TEXT | Optional email address |
-| `is_superuser` | BOOLEAN | Admin privileges, default 0 |
-| `is_active` | BOOLEAN | Account active status, default 1 |
-| `created_at` | REAL | Timestamp of account creation |
-| `updated_at` | REAL | Timestamp of last update |
 
 #### `function_logs`
 
@@ -95,7 +65,7 @@ Logs function execution events.
 | `success` | BOOLEAN | Whether execution succeeded, not null |
 | `duration` | REAL | Execution time in seconds, not null |
 | `timestamp` | REAL | Execution timestamp, not null |
-| `output_type` | TEXT | Detected output type (text, markdown, json, table) |
+| `output_type` | TEXT | Detected output type (text, markdown, json, table, chart, error, info) |
 | `error_message` | TEXT | Error message if execution failed |
 
 #### `config`
@@ -177,38 +147,6 @@ Per-step execution results.
 | `output_summary` | Brief summary of output (first 500 chars, JSON-encoded for dict/list) |
 | `error_message` | Error message if step failed |
 
-### Authentication Flow
-
-The `users` table supports the application's authentication flow:
-
-1. On first launch, if no users exist, the First-Run Account Setup screen creates the initial account.
-2. On subsequent launches, the Welcome / Login screen verifies credentials via `verify_user()`.
-3. Passwords are verified using `verify_password()` which performs secure bcrypt hash comparison.
-4. Login failures return a generic error that does not reveal whether a username exists.
-
-No session tokens or plaintext passwords are stored in the database.
-
-### bcrypt Password Hashing
-
-Passwords are hashed using [bcrypt](https://bcrypt.github.io/) with 12 rounds:
-
-```python
-from hojjat_tui.persistence import hash_password, verify_password
-
-# Hash a password
-password_hash, salt = hash_password("mysecretpassword")
-
-# Verify a password
-is_valid = verify_password("mysecretpassword", password_hash)
-# Returns True if password matches the hash
-```
-
-**Security notes**:
-- bcrypt automatically generates a unique salt for each password
-- 12 rounds provide good security/performance balance
-- The hash format is `$2b$12$...` or `$2a$12$...`
-- Passwords are never stored in plain text
-
 ### Chain Persistence
 
 #### Saving a Chain
@@ -244,16 +182,6 @@ Safe to rerun — initializes the database if it doesn't exist, or validates the
 ```bash
 python manage.py init
 ```
-
-#### `python manage.py reset-db`
-
-Clears all user data from the database (chains, users, function logs, config). The schema is preserved.
-
-```bash
-python manage.py reset-db
-```
-
-This is useful for starting fresh without uninstalling the package.
 
 #### Direct SQLite Access
 
@@ -296,7 +224,7 @@ Replace the database file with the backup:
 copy C:\backup\hojjat_tui_2024.db %APPDATA%\hojjat_tui\hojjat_tui.db
 
 # macOS/Linux
-cp /backup/hojjat_tui_2024.db $HOME/.local/share/hojjat_tui/hojjat_tui.db
+cp /backup\hojjat_tui_2024.db $HOME/.local/share/hojjat_tui/hojjat_tui.db
 ```
 
 After restoring, reinitialize the management commands:
@@ -309,7 +237,7 @@ python manage.py init
 
 The database file will grow over time as execution history accumulates. To manage size:
 
-1. **Periodic reset**: Use `python manage.py reset-db` to clear old data
+1. **Periodic reset**: Use database management commands to clear old data
 2. **Selective deletion**: Use SQL DELETE statements to remove specific records
 3. **Auto-cleanup**: Future versions may include automatic history cleanup
 
